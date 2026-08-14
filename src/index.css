@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@layer base {
+  body { 
+    @apply font-sans text-slate-800 min-h-screen;
+    background: linear-gradient(135deg, #f0f4ff 0%, #f8fafc 50%, #f0f0ff 100%);
+  }
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.progress-bar {
+  height: 8px;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  overflow: hidden;
+  margin-top: 6px;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.progress-fill {
+  height: 100%;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Scrollbar styles for the modal */
+.modal-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.modal-scroll::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.02);
+}
+.modal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.15);
+  border-radius: 4px;
+}
+.modal-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.25);
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; }
+  .glass-card { background: white !important; backdrop-filter: none !important; box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
+}
+
+/* ── Markdown Senaryo Stilleri (react-markdown çıktısı) ── */
+.scenario-markdown p {
+  color: #475569;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  margin: 0.2rem 0;
+}
+.scenario-markdown strong {
+  color: #1e293b;
+  font-weight: 700;
+}
+.scenario-markdown ul,
+.scenario-markdown ol {
+  padding-left: 1.5rem;
+  margin: 0.25rem 0 0.75rem;
+}
+.scenario-markdown li {
+  color: #475569;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  margin: 0.15rem 0;
+}
+.scenario-markdown li strong {
+  color: #1e293b;
+}

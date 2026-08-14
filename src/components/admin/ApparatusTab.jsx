@@ -1,0 +1,135 @@
+import React, { useState, useEffect } from 'react';
+import { Save, Trash2, Pencil, X, List } from 'lucide-react';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { db } from '../../config/firebase';
+import toast from 'react-hot-toast';
+import { invalidateDbCache } from '../../hooks/useDbData';
+
+export function ApparatusTab({ confirmDelete }) {
+    const [mevcutAparatlar, setMevcutAparatlar] = useState([]);
+    const [isSaving, setIsSaving] = useState(false);
+    const [editingId, setEditingId] = useState(null);
+    
+    const [aparat, setAparat] = useState({ ad: '', uygunZeminler: '', uygunMakineler: '' });
+
+    useEffect(() => {
+        const unSub = onSnapshot(collection(db, 'aparatlar'), snapshot => {
+            setMevcutAparatlar(snapshot.docs.map(d => ({ ...d.data(), id: d.id })));
+        });
+        return () => unSub();
+    }, []);
+
+    const cancelEdit = () => {
+        setEditingId(null);
+        setAparat({ ad: '', uygunZeminler: '', uygunMakineler: '' });
+    };
+
+    const handleEditAparat = (a) => {
+        setEditingId(a.id);
+        setAparat({
+            ad: a.ad || '',
+            uygunZeminler: a.uygunZeminler?.join(', ') || '',
+            uygunMakineler: a.uygunMakineler?.join(', ') || '',
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleDeleteAparat = (id, ad) => {
+        confirmDelete(ad, async () => {
+            try {
+                await deleteDoc(doc(db, 'aparatlar', String(id)));
+                invalidateDbCache();
+                toast.success(`"${ad}" ped/fırçası silindi.`);
+            } catch (err) {
+                console.error('Silme hatası:', err);
+                toast.error('Ped/Fırça silinirken hata oluştu.');
+            }
+        });
+    };
+
+    const handleAparatChange = e => setAparat({ ...aparat, [e.target.name]: e.target.value });
+
+    const handleAparatSubmit = async (e) => {
+        e.preventDefault();
+        setIsSaving(true);
+        try {
+            const dataToSave = {
+                ad: aparat.ad,
+                uygunZeminler:  aparat.uygunZeminler.split(',').map(s => s.trim()).filter(Boolean),
+                uygunMakineler: aparat.uygunMakineler.split(',').map(s => s.trim()).filter(Boolean),
+            };
+            if (editingId) {
+                await setDoc(doc(db, 'aparatlar', editingId), dataToSave, { merge: true });
+                toast.success(`Ped/Fırça '${aparat.ad}' başarıyla güncellendi!`);
+            } else {
+                await addDoc(collection(db, 'aparatlar'), dataToSave);
+                toast.success(`Ped/Fırça '${aparat.ad}' başarıyla eklendi!`);
+            }
+            invalidateDbCache();
+            cancelEdit();
+        } catch (err) {
+            console.error('Hata:', err);
+            toast.error('Ped/Fırça kaydedilirken hata oluştu: ' + err.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const inputCls = 'w-full border border-gray-200 rounded-lg p-2 text-sm focus:border-rose-500 outline-none transition-colors';
+
+    return (
+        <div>
+            <form onSubmit={handleAparatSubmit} className="flex flex-col gap-4">
+                <h3 className="font-black text-slate-800 text-lg mb-2">
+                    {editingId ? 'Ped/Fırçayı Düzenle' : 'Yeni Ped/Fırça Detayları'}
+                </h3>
+                {[
+                    { name: 'ad',            label: 'Ped/Fırça Adı (Örn: Standart Yıkama Fırçası 43cm)',       placeholder: '' },
+                    { name: 'uygunZeminler', label: 'Uygun Zeminler (Virgülle ayırın)',                      placeholder: 'Epoksi, Beton, Seramik...' },
+                    { name: 'uygunMakineler',label: 'Uygun Makineler (Virgülle ayırın)',                     placeholder: 'Taski Swingo 455B, Karcher BD...' },
+                ].map(({ name, label, placeholder }) => (
+                    <div key={name}>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">{label}</label>
+                        <input required name={name} value={aparat[name]} onChange={handleAparatChange} placeholder={placeholder} className={inputCls} />
+                    </div>
+                ))}
+                <div className="mt-4 flex items-center gap-3">
+                    <button type="submit" disabled={isSaving} className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-6 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-colors">
+                        <Save size={18} /> {isSaving ? 'Kaydediliyor...' : (editingId ? 'Güncelle' : 'Ped/Fırçayı Kaydet')}
+                    </button>
+                    {editingId && (
+                        <button type="button" onClick={cancelEdit} className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-6 py-3 rounded-xl flex items-center gap-2 transition-colors">
+                            <X size={18} /> İptal
+                        </button>
+                    )}
+                </div>
+            </form>
+
+            <div className="mt-12 pt-8 border-t border-gray-100">
+                <div className="flex items-center gap-2 mb-6">
+                    <List size={20} className="text-slate-400" />
+                    <h3 className="font-black text-slate-800 text-lg">Mevcut Kayıtlar</h3>
+                </div>
+                <div className="flex flex-col gap-3">
+                    {mevcutAparatlar.length === 0 && <p className="text-sm text-slate-500">Henüz ped/fırça bulunmuyor.</p>}
+                    {mevcutAparatlar.map(a => (
+                        <div key={a.id} className="flex justify-between items-center p-4 bg-slate-50 border border-slate-100 rounded-xl hover:shadow-md transition-shadow">
+                            <div>
+                                <h4 className="font-bold text-slate-800">{a.ad}</h4>
+                                <p className="text-xs font-medium text-slate-500 mt-0.5 max-w-md truncate">Uyumlu: {a.uygunMakineler?.join(', ') || ''}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => handleEditAparat(a)} className="p-2 text-indigo-500 hover:bg-indigo-100 rounded-lg transition-colors" title="Düzenle">
+                                    <Pencil size={18} />
+                                </button>
+                                <button onClick={() => handleDeleteAparat(a.id, a.ad)} className="p-2 text-rose-500 hover:bg-rose-100 rounded-lg transition-colors" title="Sil">
+                                    <Trash2 size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
