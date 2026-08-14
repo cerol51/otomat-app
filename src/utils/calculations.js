@@ -102,21 +102,21 @@ export const calculateWearFactor = (fircaBasinciStr, zemin, kirYogunlugu) => {
 export const getAkilliPedOnerisi = (zemin, kirYogunlugu) => {
     let oneriler = [];
     if (zemin.includes("Epoksi") || zemin.includes("Beton")) {
-        if (kirYogunlugu === "Hafif Kirli") oneriler = ["Twister Yeşil", "Klasik Kırmızı Ped"];
+        if (kirYogunlugu === "Hafif Kirli") oneriler = ["Twister Yeşil", "Kırmızı Ped"];
         else if (kirYogunlugu === "Ağır Kirli") oneriler = ["Twister Kırmızı", "Tynex Fırça"];
         else if (kirYogunlugu === "Çok Ağır / Restorasyon") oneriler = ["Twister Hibrit Siyah", "Twister Hibrit Kırmızı", "Tynex Fırça"];
-        else oneriler = ["Twister Mavi", "Klasik Yeşil Ped"];
+        else oneriler = ["Twister Mavi", "Yeşil Ped"];
     }
     else if (zemin.includes("Mermer") || zemin.includes("Doğal Taş") || zemin.includes("Granit")) {
         if (kirYogunlugu === "Çok Ağır / Restorasyon") oneriler = ["Twister Hibrit Kırmızı", "Twister Ekstrem Kırmızı", "Twister Beyaz", "Twister Sarı"];
-        else if (kirYogunlugu === "Ağır Kirli") oneriler = ["Twister Turuncu", "Klasik Yeşil Ped"];
+        else if (kirYogunlugu === "Ağır Kirli") oneriler = ["Twister Turuncu", "Yeşil Ped"];
         else oneriler = ["Twister Pembe", "Twister Yeşil"];
     }
     else {
-        if (kirYogunlugu === "Hafif Kirli") oneriler = ["Twister Yeşil", "Twister Gri", "Klasik Kırmızı Ped"];
-        else if (kirYogunlugu === "Ağır Kirli") oneriler = ["Twister Mavi", "Klasik Yeşil Ped"];
-        else if (kirYogunlugu === "Çok Ağır / Restorasyon") oneriler = ["Klasik Siyah Ped", "Klasik Kahverengi Ped"];
-        else oneriler = ["Twister Mavi", "Klasik Kırmızı Ped"];
+        if (kirYogunlugu === "Hafif Kirli") oneriler = ["Twister Yeşil", "Twister Gri", "Kırmızı Ped"];
+        else if (kirYogunlugu === "Ağır Kirli") oneriler = ["Twister Mavi", "Yeşil Ped"];
+        else if (kirYogunlugu === "Çok Ağır / Restorasyon") oneriler = ["Siyah Ped", "Kahverengi Ped"];
+        else oneriler = ["Twister Mavi", "Kırmızı Ped"];
     }
     return oneriler;
 };

@@ -170,34 +170,78 @@ export function InputPanel({
                     </div>
 
                     {/* Akıllı Ped Önerisi */}
-                    <motion.div
-                        key={onerilenPedler.join(',')}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-5 mb-5 p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 flex items-start gap-3 shadow-sm"
-                    >
-                        <span className="text-xl mt-0.5">💡</span>
-                        <div>
-                            <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider mb-1">Akıllı Sistem Önerisi</p>
-                            <p className="text-sm text-amber-900 font-medium leading-snug">
-                                {onerilenPedler.length > 0 ? onerilenPedler.join(' veya ') : 'Zemin ve kir yoğunluğuna göre öneri hesaplanıyor...'}
-                            </p>
-                        </div>
-                    </motion.div>
+                    {(zemin && kirTuru && kirYogunlugu) && (
+                        <motion.div
+                            key={onerilenPedler.join(',')}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mt-5 mb-5 p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 flex items-start gap-3 shadow-sm"
+                        >
+                            <span className="text-xl mt-0.5">💡</span>
+                            <div className="flex-1">
+                                <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider mb-2">Akıllı Sistem Önerisi</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {onerilenPedler.length > 0 ? (
+                                        onerilenPedler.map(ped => {
+                                            const normalizedPed = (ped || '').toLowerCase().replace(/ı/g, 'i');
+                                            const aparat = aparatVeritabani.find(a => {
+                                                const normalizedAd = (a.ad || '').toLowerCase().replace(/ı/g, 'i');
+                                                return normalizedAd.includes(normalizedPed) || normalizedPed.includes(normalizedAd);
+                                            });
+                                            
+                                            const isSelected = aparat && seciliAparatId === aparat.id;
+                                            
+                                            return (
+                                                <button
+                                                    key={ped}
+                                                    onClick={() => {
+                                                        if (aparat) {
+                                                            setSeciliKategori(aparat.kategori);
+                                                            setSeciliAparatId(aparat.id);
+                                                        }
+                                                    }}
+                                                    type="button"
+                                                    className={`px-3 py-1.5 text-sm font-semibold rounded-lg border transition-all ${
+                                                        isSelected
+                                                            ? 'bg-amber-600 text-white border-amber-700 shadow-md'
+                                                            : aparat 
+                                                                ? 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100 hover:border-amber-400 cursor-pointer shadow-sm'
+                                                                : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                                    }`}
+                                                    disabled={!aparat}
+                                                >
+                                                    {ped}
+                                                </button>
+                                            );
+                                        })
+                                    ) : (
+                                        <p className="text-sm text-amber-900 font-medium">Bu kombinasyon için özel bir öneri bulunamadı.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
 
                     {/* Ped/Fırça Seçimi */}
                     <div className="border-t border-gray-100/80 pt-4">
-                        <InputWrap label="Kategori Seçimi">
+                        <InputWrap label="Ped Kategorisi">
                             <select
                                 value={seciliKategori}
-                                onChange={e => setSeciliKategori(e.target.value)}
-                                className={`${selectBase} focus:border-emerald-500 focus:ring-emerald-500/20`}
+                                onChange={e => {
+                                    setSeciliKategori(e.target.value);
+                                    setSeciliAparatId('');
+                                }}
+                                className={`${selectBase} focus:border-indigo-500 focus:ring-indigo-500/20`}
                             >
-                                <option value="">Seçiniz...</option>
-                                {kategoriler.map(k => <option key={k} value={k}>{k}</option>)}
+                                <option value="">Tümü</option>
+                                {kategoriler.map(k => (
+                                    <option key={k} value={k}>
+                                        {k === 'Klasik Sistem Pedler' ? 'Standart Pedler' : k}
+                                    </option>
+                                ))}
                             </select>
                         </InputWrap>
-                        <InputWrap label="Sizin Tercihiniz">
+                        <InputWrap label="Ped Türleri">
                             <select
                                 value={seciliAparatId ?? ''}
                                 onChange={e => setSeciliAparatId(e.target.value)}
@@ -207,7 +251,9 @@ export function InputPanel({
                                 {aparatVeritabani
                                     .filter(a => a.kategori === seciliKategori)
                                     .map(a => (
-                                        <option key={a.id} value={a.id}>{a.ad}</option>
+                                        <option key={a.id} value={a.id}>
+                                            {a.ad.replace('Klasik ', '')}
+                                        </option>
                                     ))}
                             </select>
                         </InputWrap>

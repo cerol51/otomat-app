@@ -29,7 +29,7 @@ export function useDbData() {
                     return;
                 }
 
-                const sabitDoc = await getDoc(doc(db, 'sabitVeriler', 'uygulamaA ayarlari'));
+                const sabitDoc = await getDoc(doc(db, 'sabitVeriler', 'uygulamaAyarlari'));
                 const sabitVeriler = sabitDoc.exists() ? sabitDoc.data() : {};
 
                 const makinelerSnap = await getDocs(collection(db, 'makineler'));

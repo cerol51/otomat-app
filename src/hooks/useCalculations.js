@@ -99,7 +99,7 @@ export function useCalculations({
         uyumDurumu = 'success';
         uyumMesaji = '✅ Seçiminiz önerilen pedlerle mükemmel uyumlu!';
     } else if (
-        onerilenPedler.some(p => p.includes('Klasik') && seciliPedAdi.includes('Klasik')) ||
+        onerilenPedler.some(p => !p.includes('Twister') && !seciliPedAdi.includes('Twister')) ||
         onerilenPedler.some(p => p.includes('Twister') && seciliPedAdi.includes('Twister'))
     ) {
         uyumDurumu = 'info';
