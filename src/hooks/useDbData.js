@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
-const CACHE_KEY = 'otomatDbCacheV2';
+const CACHE_KEY = 'otomatDbCacheV5';
 
 /** sessionStorage cache'ini dışarıdan temizlemek için yardımcı fonksiyon */
 export function invalidateDbCache() {
@@ -38,13 +38,16 @@ export function useDbData() {
 
                 const aparatlarSnap = await getDocs(collection(db, 'aparatlar'));
                 const aparatlar = aparatlarSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+                
+                // Ped kategorisini veritabanındaki aparatlardan dinamik olarak çıkartıyoruz
+                const dinamikKategoriler = [...new Set(aparatlar.map(a => a.kategori).filter(Boolean))];
 
                 const data = {
                     zeminTipleri: sabitVeriler.zeminTipleri || [],
                     sektorelVeriler: sabitVeriler.sektorelVeriler || {},
                     kirYogunluklari: sabitVeriler.kirYogunluklari || [],
-                    yasSecenekleri: sabitVeriler.yasSecenekleri || [],
-                    kategoriler: sabitVeriler.kategoriler || [],
+                    yasSecenekleri: ['0-1 Yaş', '1-3 Yaş', '3-5+ Yaş'],
+                    kategoriler: dinamikKategoriler.length > 0 ? dinamikKategoriler : (sabitVeriler.kategoriler || []),
                     markalar: sabitVeriler.markalar || [],
                     surusTipleri: sabitVeriler.surusTipleri || [],
                     makineVeritabani: makineler,

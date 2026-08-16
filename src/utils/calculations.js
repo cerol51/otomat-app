@@ -110,7 +110,7 @@ export const getAkilliPedOnerisi = (zemin, kirYogunlugu) => {
     else if (zemin.includes("Mermer") || zemin.includes("Doğal Taş") || zemin.includes("Granit")) {
         if (kirYogunlugu === "Çok Ağır / Restorasyon") oneriler = ["Twister Hibrit Kırmızı", "Twister Ekstrem Kırmızı", "Twister Beyaz", "Twister Sarı"];
         else if (kirYogunlugu === "Ağır Kirli") oneriler = ["Twister Turuncu", "Yeşil Ped"];
-        else oneriler = ["Twister Pembe", "Twister Yeşil"];
+        else oneriler = ["Twister Pembe", "Twister Yeşil", "Kırmızı Ped"];
     }
     else {
         if (kirYogunlugu === "Hafif Kirli") oneriler = ["Twister Yeşil", "Twister Gri", "Kırmızı Ped"];
