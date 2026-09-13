@@ -11,7 +11,7 @@ import { auth, db } from '../config/firebase';
 const AuthContext = createContext();
 
 // BURAYA KENDİ E-POSTA ADRESİNİZİ YAZIN
-const ADMIN_EMAILS = ["admin@otomatpro.com", "cihat.erol@tr.issworld.com"]; 
+const ADMIN_EMAILS = ["admin@otomatpro.com", "cihaterol@gmail.com"]; 
 
 export function useAuth() {
     return useContext(AuthContext);

@@ -1,8 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Settings, ShieldAlert, FileText, CheckCircle } from 'lucide-react';
+import { Settings, ShieldAlert, FileText, CheckCircle, ArrowRight } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Landing() {
+    const { currentUser } = useAuth();
+
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
             <nav className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center shadow-sm">
@@ -11,8 +14,16 @@ export default function Landing() {
                     <span className="font-black text-2xl tracking-tight text-slate-800">Otomat<span className="text-indigo-600">Pro</span></span>
                 </div>
                 <div className="flex gap-4">
-                    <Link to="/login" className="px-5 py-2.5 text-slate-700 font-bold hover:bg-slate-100 rounded-xl transition-all">Giriş Yap</Link>
-                    <Link to="/register" className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all">Kayıt Ol</Link>
+                    {currentUser ? (
+                        <Link to="/app" className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center gap-2">
+                            Uygulamaya Git <ArrowRight size={18} />
+                        </Link>
+                    ) : (
+                        <>
+                            <Link to="/login" className="px-5 py-2.5 text-slate-700 font-bold hover:bg-slate-100 rounded-xl transition-all">Giriş Yap</Link>
+                            <Link to="/register" className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition-all">Kayıt Ol</Link>
+                        </>
+                    )}
                 </div>
             </nav>
 
@@ -26,9 +37,15 @@ export default function Landing() {
                         maliyetleri hesaplayın ve profesyonel PDF raporları oluşturun.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                        <Link to="/register" className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-lg rounded-2xl shadow-xl shadow-indigo-200 transition-all">
-                            Hemen Ücretsiz Başlayın
-                        </Link>
+                        {currentUser ? (
+                            <Link to="/app" className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-lg rounded-2xl shadow-xl shadow-indigo-200 transition-all flex items-center justify-center gap-2">
+                                Panoya Dön <ArrowRight size={20} />
+                            </Link>
+                        ) : (
+                            <Link to="/register" className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-lg rounded-2xl shadow-xl shadow-indigo-200 transition-all">
+                                Hemen Ücretsiz Başlayın
+                            </Link>
+                        )}
                     </div>
                 </div>
 

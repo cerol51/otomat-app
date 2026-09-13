@@ -1,4 +1,5 @@
 import { getYasFaktoru, calculateChemicalInfo, getAkilliPedOnerisi, parseSolusyonTuketimi, calculateWearFactor } from '../utils/calculations';
+import { isTwisterPad, isMelaminePad, isMicrofiberPad, normalizeString, getIncompatibilityReason } from '../utils/helpers';
 
 /**
  * Aktif makine, aparat ve form girdilerine göre tüm operasyonel hesaplamaları yapar.
@@ -6,7 +7,7 @@ import { getYasFaktoru, calculateChemicalInfo, getAkilliPedOnerisi, parseSolusyo
  */
 export function useCalculations({
     aktifMakine, aktifAparat, alanInput,
-    sektor, zemin, kirYogunlugu, makineYasi
+    sektor, zemin, kirYogunlugu, makineYasi, isCilaliZemin
 }) {
     if (!aktifMakine) return null;
 
@@ -29,19 +30,35 @@ export function useCalculations({
     const uygulanacakYasFaktoru = (alanInput <= maxYikamaKapasitesi) ? 1 : yasFaktoru;
     const pratikM2 = Math.round(pratikM2_normal); // Ekranda gösterilen pratik kapasite her zaman sabit kalır
     
-    const tuketimOraniLitre = parseSolusyonTuketimi(aktifMakine.solusyonTuketimi, kirYogunlugu);
+    const tuketimOraniLitre = parseSolusyonTuketimi(aktifMakine.solusyonTuketimi, zemin, kirYogunlugu);
     const kaynakSuTuketimi = Math.round(alanInput * tuketimOraniLitre);
     
-    const isTwister =
-        (aktifAparat?.ad || '').includes('Twister') ||
-        (aktifAparat?.ad || '').includes('Melamin');
+    const seciliPedAdi = aktifAparat?.ad || '';
+    const pedAdiLower = normalizeString(seciliPedAdi);
 
-    const kimyasal = isTwister
-        ? { aciklama: 'Kullanılmaz (Sadece Su ile %100 Temizlik Sağlanır)', litre: '0', dozajYuzdesi: 0 }
-        : calculateChemicalInfo(sektor, kirYogunlugu, kaynakSuTuketimi);
+    const isTwister = isTwisterPad(pedAdiLower);
+
+    let kimyasal = calculateChemicalInfo(sektor, zemin, kirYogunlugu, kaynakSuTuketimi, isCilaliZemin);
+    if (pedAdiLower.includes('twister')) {
+        if (pedAdiLower.includes('beyaz') || pedAdiLower.includes('sarı') || pedAdiLower.includes('sari') || pedAdiLower.includes('hibrit')) {
+            kimyasal = { aciklama: 'Kullanılmaz (Sadece Su ile Restorasyon)', litre: '0', dozajYuzdesi: 0 };
+        } else if (pedAdiLower.includes('gri')) {
+            kimyasal = { aciklama: 'Kuru veya Nötr (Kimyasal Önerilmez)', litre: '0', dozajYuzdesi: 0 };
+        } else {
+            kimyasal = { aciklama: 'Su veya Nötr (Genelde Sadece Su Yeterlidir)', litre: '0', dozajYuzdesi: 0 };
+        }
+    } else if (isMelaminePad(pedAdiLower)) {
+        kimyasal = { aciklama: 'Sadece Su (Aşırı asit/alkali süngeri eritir)', litre: '0', dozajYuzdesi: 0 };
+    } else if (isMicrofiberPad(pedAdiLower)) {
+        kimyasal.aciklama = `Nötr veya Su (Ağır kimyasal dokuyu bozar) - ${kimyasal.aciklama}`;
+    } else if (pedAdiLower.includes('siyah')) {
+        kimyasal.aciklama = `Sadece Sert Zeminlerde! - ${kimyasal.aciklama}`;
+    } else if (pedAdiLower.includes('yeşil') || pedAdiLower.includes('yesil')) {
+        kimyasal.aciklama = `Hassas Zeminlerde Kullanılmaz! - ${kimyasal.aciklama}`;
+    }
 
     const sureCarpani = 1 / uygulanacakYasFaktoru; // Eğer kapasite aşılırsa, süre orantısal olarak uzar
-    const netYikamaDk = Math.round(((alanInput / pratikM2) * 60) * sureCarpani);
+    const netYikamaDk = pratikM2 > 0 ? Math.round(((alanInput / pratikM2) * 60) * sureCarpani) : 0;
     const temizSuKapasitesi = aktifMakine.temizSuTanki || aktifMakine.tank || 1;
     const kirliSuKapasitesi = aktifMakine.kirliSuTanki || temizSuKapasitesi;
     
@@ -67,7 +84,9 @@ export function useCalculations({
     let doldurBosaltDk = seferSayisi * tankDoldurmaSuresi;
 
     const toplamOperasyonDk = netYikamaDk + doldurBosaltDk;
-    const harcananSaat = toplamOperasyonDk / 60;
+    // Akü sadece yıkama yaparken ve su doldurmaya giderken (sürüş) harcanır. Suyu doldururken/boşaltırken makine kapalıdır.
+    const netMotorCalismaDk = netYikamaDk + (seferSayisi * ulasimSuresiDk);
+    const harcananSaat = netMotorCalismaDk / 60;
     const kullanilabilirAku =
         akuKapasitesi >= 99
             ? 99
@@ -85,10 +104,21 @@ export function useCalculations({
     }
 
     const onerilenPedler = getAkilliPedOnerisi(zemin, kirYogunlugu);
-    const seciliPedAdi = aktifAparat?.ad || '';
+    const zeminBilgisi = zemin || 'Belirtilmemiş Zemin';
+    const kirBilgisi = kirYogunlugu || 'Belirtilmemiş Yoğunluk';
+    const secilenBasitAd = seciliPedAdi || 'Ped seçilmedi';
+    const onerilenlerText = onerilenPedler.length > 0 ? onerilenPedler.join(' veya ') : '';
+
     let uyumDurumu = 'warning';
     let uyumMesaji = 'Önerilen pedler ile seçiminizi karşılaştırın.';
-    if (
+    
+    if (!seciliPedAdi) {
+        uyumDurumu = 'warning';
+        uyumMesaji = 'Lütfen makineye uygun bir ped seçiniz.';
+    } else if (onerilenPedler.length === 0) {
+        uyumDurumu = 'warning';
+        uyumMesaji = 'Bu kombinasyon için özel bir sistem önerimiz bulunmuyor, kendi uzmanlığınıza göre seçim yapabilirsiniz.';
+    } else if (
         seciliPedAdi &&
         onerilenPedler.some(
             p =>
@@ -97,19 +127,32 @@ export function useCalculations({
         )
     ) {
         uyumDurumu = 'success';
-        uyumMesaji = '✅ Seçiminiz önerilen pedlerle mükemmel uyumlu!';
+        uyumMesaji = `✅ Seçiminiz mükemmel uyumlu! (${zeminBilgisi} üzerinde ${kirBilgisi} kir için ${secilenBasitAd} idealdir.)`;
     } else if (
         onerilenPedler.some(p => !p.includes('Twister') && !seciliPedAdi.includes('Twister')) ||
         onerilenPedler.some(p => p.includes('Twister') && seciliPedAdi.includes('Twister'))
     ) {
         uyumDurumu = 'info';
-        uyumMesaji = '⚠️ Aynı kategoride farklı bir ped öneriliyor, alternatifleri değerlendirin.';
+        uyumMesaji = `⚠️ Kısmi uyum. (${zeminBilgisi} zemin / ${kirBilgisi} kir için asıl önerimiz: ${onerilenlerText}. Sizin seçiminiz: ${secilenBasitAd}.)`;
     } else {
         uyumDurumu = 'danger';
-        uyumMesaji = '❌ Seçiminiz önerilen ped kategorisiyle uyuşmuyor.';
+        const sebep = getIncompatibilityReason(secilenBasitAd, zemin, kirYogunlugu);
+        uyumMesaji = `❌ Uyumsuz seçim! (${sebep} Tavsiye edilen: ${onerilenlerText})`;
     }
 
-    const teorikOmur = isTwister ? 300000 : 10000;
+    let teorikOmur = 10000; // Standart ped
+
+    if (pedAdiLower.includes('twister')) {
+        if (pedAdiLower.includes('hibrit')) teorikOmur = 5000;
+        else if (pedAdiLower.includes('kırmızı') || pedAdiLower.includes('kirmizi')) teorikOmur = 15000;
+        else if (pedAdiLower.includes('beyaz') || pedAdiLower.includes('sarı') || pedAdiLower.includes('sari')) teorikOmur = 25000;
+        else if (pedAdiLower.includes('gri')) teorikOmur = 40000;
+        else teorikOmur = 30000; // Yeşil, Mavi, Pembe, Mor vb.
+    } else if (isMelaminePad(pedAdiLower)) {
+        teorikOmur = 1000;
+    } else if (isMicrofiberPad(pedAdiLower)) {
+        teorikOmur = 50000;
+    }
     
     // Yıpranma çarpanı (Zemin, Kir Yoğunluğu ve Fırça Basıncına göre)
     const yipranmaCarpani = calculateWearFactor(aktifMakine.fircaBasinci || aktifMakine.basinc, zemin, kirYogunlugu);

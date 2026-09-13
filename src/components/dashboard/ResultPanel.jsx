@@ -112,7 +112,7 @@ export function ResultPanel({
                             </span>
                         </TableRow>
                         <TableRow label="Ped/Fırça Kullanım Senaryosu:" bg="bg-slate-50/30">
-                            <span className="font-bold text-slate-900">{aktifAparat.ad}:</span>{' '}
+                            <span className="font-bold text-slate-900">{aktifAparat.ad || 'Ped Seçilmedi'}:</span>{' '}
                             <span className="text-slate-600">{aktifAparat.aciklama}</span>
                         </TableRow>
                         <TableRow label="Kimyasal Türü ve Dozajı:">

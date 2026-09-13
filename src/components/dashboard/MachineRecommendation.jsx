@@ -1,8 +1,19 @@
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Zap, CheckCircle } from 'lucide-react';
+import { getYasFaktoru } from '../../utils/calculations';
 
-export function MachineRecommendation({ alanInput, makineVeritabani, onSelectMachine }) {
+const getZeminCarpani = (kir) => {
+    switch (kir) {
+        case 'Hafif': return 1.0;
+        case 'Orta': return 1.1;
+        case 'Ağır': return 1.25;
+        case 'Çok Ağır': return 1.5;
+        default: return 1.1;
+    }
+};
+
+export function MachineRecommendation({ alanInput, kirYogunlugu, makineYasi, makineVeritabani, onSelectMachine }) {
 
     const recommendations = useMemo(() => {
         // En az 30 dakika sürecek (pratik <= alan * 2) olan en hızlı (en yüksek kapasiteli) makineyi bul
@@ -18,24 +29,44 @@ export function MachineRecommendation({ alanInput, makineVeritabani, onSelectMac
 
             // Sıralama: Pratik Performans'a göre artan şekilde
             const sirali = [...makineler].sort((a, b) => {
-                const pratikA = (a.teorikPerformans || a.m2 || 0) * 0.8;
-                const pratikB = (b.teorikPerformans || b.m2 || 0) * 0.8;
+                const pratikA = a.pratikPerformans || ((a.teorikPerformans || a.m2 || 0) * 0.65);
+                const pratikB = b.pratikPerformans || ((b.teorikPerformans || b.m2 || 0) * 0.65);
                 if (Math.abs(pratikA - pratikB) < 1) {
                     return (a.calismaGenisligi || 0) - (b.calismaGenisligi || 0);
                 }
                 return pratikA - pratikB;
             });
 
-            // Uygun olanlar: Kapasitesi maxMantikiKapasite'den küçük veya eşit olanlar
-            const uygunMakineler = sirali.filter(m => ((m.teorikPerformans || m.m2 || 0) * 0.8) <= maxMantikiKapasite);
+            // Fiziksel kapasiteye göre uygun makineleri filtrele
+            const yasFaktoru = getYasFaktoru(makineYasi);
+            const sureCarpani = getZeminCarpani(kirYogunlugu);
 
-            // Eğer uygun makine varsa, içlerinden en yüksek kapasitelisini (en hızlı olanı, yani listenin sonundakini) al
+            const uygunMakineler = sirali.filter(m => {
+                const pratik = m.pratikPerformans || ((m.teorikPerformans || m.m2 || 0) * 0.65);
+                const tekSarj = m.tekSarjPratikAlan || (pratik * 1.5);
+                const tank = m.temizSuTanki || 0;
+                
+                // 1. Akü/Şarj Kapasitesi: Makine tek şarjda alanı bitirebilmeli (Toleranssız, net kontrol)
+                // Gerçek kapasite, makinenin yıpranma payına (yaş) ve kire göre yavaşlamasına (süre çarpanı) bağlıdır.
+                const gercekTekSarjAlan = (tekSarj * yasFaktoru) / sureCarpani;
+                const akuYeterli = gercekTekSarjAlan >= alanInput;
+                
+                // 2. Su Tankı: Sık su doldur-boşalt yapmamak için tank yeterli olmalı (Maksimum 3-4 depo. tank * 250 >= alan)
+                const tankYeterli = (tank * 250) >= alanInput;
+                
+                // 3. Hız/Zaman: İş 3 saatten uzun sürmemeli (çok küçük makine büyük alana verilmemeli)
+                const hizYeterli = (pratik * 3) >= alanInput;
+                
+                return akuYeterli && tankYeterli && hizYeterli;
+            });
+
+            // Uygun olanlardan en küçüğünü (sıradaki ilkini) seç, gereksiz büyük makine önermemek için.
             if (uygunMakineler.length > 0) {
-                return uygunMakineler[uygunMakineler.length - 1];
+                return uygunMakineler[0];
             }
 
-            // Eğer tüm makineler çok büyükse (alan çok küçükse), o zaman en küçük makineyi ver
-            return sirali[0];
+            // Alan çok büyükse ve hiçbir makine tek başına yetmiyorsa, en büyük makineyi öner
+            return sirali[sirali.length - 1];
         };
 
         return {
@@ -51,7 +82,7 @@ export function MachineRecommendation({ alanInput, makineVeritabani, onSelectMac
     const renderCard = (machine, brandColor, gradient) => {
         if (!machine) return null;
         
-        const pratik = Math.round((machine.teorikPerformans || machine.m2 || 0) * 0.8);
+        const pratik = Math.round(machine.pratikPerformans || ((machine.teorikPerformans || machine.m2 || 0) * 0.65));
         const estimatedTime = (alanInput / pratik).toFixed(1);
 
         return (

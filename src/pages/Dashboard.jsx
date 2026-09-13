@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Settings } from 'lucide-react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -8,6 +8,7 @@ import toast from 'react-hot-toast';
 
 import { useDbData } from '../hooks/useDbData';
 import { useCalculations } from '../hooks/useCalculations';
+import { useDashboardForm } from '../hooks/useDashboardForm';
 import { InputPanel } from '../components/dashboard/InputPanel';
 import { ResultPanel } from '../components/dashboard/ResultPanel';
 import { ScenarioModal } from '../components/dashboard/ScenarioModal';
@@ -16,24 +17,36 @@ export default function Dashboard() {
     const { dbData, isLoading, error } = useDbData();
     const { currentUser } = useAuth();
 
-    // ── Form State ──
-    const [alanInput, setAlanInput]         = useState('');
-    const [sektor, setSektor]               = useState('');
-    const [zemin, setZemin]                 = useState('');
-    const [kirTuru, setKirTuru]             = useState('');
-    const [kirYogunlugu, setKirYogunlugu]   = useState('');
-    const [seciliMarka, setSeciliMarka]     = useState('');
-    const [seciliSurus, setSeciliSurus]     = useState('');
-    const [seciliKategori, setSeciliKategori] = useState('');
-    const [seciliAparatId, setSeciliAparatId] = useState(null);
-    const [seciliMakineId, setSeciliMakineId] = useState(null);
-    const [makineYasi, setMakineYasi]       = useState('');
+    // ── Form State (Hook ile yönetiliyor) ──
+    const {
+        alanInput, handleAlanChange,
+        sektor, handleSektorChange,
+        zemin, setZemin,
+        kirTuru, setKirTuru,
+        kirYogunlugu, setKirYogunlugu,
+        isCilaliZemin, setIsCilaliZemin,
+        seciliMarka, setSeciliMarka, handleMarkaChange,
+        seciliSurus, setSeciliSurus, handleSurusChange,
+        seciliKategori, setSeciliKategori, handleKategoriChange,
+        seciliAparatId, setSeciliAparatId,
+        seciliMakineId, setSeciliMakineId, handleSelectRecommendedMachine,
+        makineYasi, setMakineYasi
+    } = useDashboardForm(dbData?.sektorelVeriler || {});
 
     // ── UI State ──
     const [showScenario, setShowScenario]   = useState(false);
     const [isExporting, setIsExporting]     = useState(false);
     const [isSaving, setIsSaving]           = useState(false);
     const [saveSuccess, setSaveSuccess]     = useState(false);
+
+    // ── Referanslar ──
+    const resultsRef = useRef(null);
+
+    const scrollToResults = useCallback(() => {
+        if (resultsRef.current) {
+            resultsRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, []);
 
     // ── Hata bildirimi ──
     useEffect(() => {
@@ -64,42 +77,6 @@ export default function Dashboard() {
             .filter(Boolean))];
     }, [makineVeritabani, seciliMarka]);
 
-    // ── Manuel Seçimlerde Alt Alanları Sıfırlama ──
-    const handleMarkaChange = useCallback((marka) => {
-        setSeciliMarka(marka);
-        setSeciliSurus('');
-        setSeciliMakineId('');
-    }, []);
-
-    const handleSurusChange = useCallback((surus) => {
-        setSeciliSurus(surus);
-        setSeciliMakineId('');
-    }, []);
-
-    // ── Sektör değişince kir türünü sıfırla ──
-    const handleSektorChange = useCallback((newSektor) => {
-        setSektor(newSektor);
-        const yeniKirler = sektorelVeriler[newSektor]?.kirler || [];
-        if (!yeniKirler.includes(kirTuru)) setKirTuru(yeniKirler[0] || '');
-    }, [kirTuru, sektorelVeriler]);
-
-    const handleAlanChange = useCallback((e) => {
-        const value = e.target.value;
-        if (value === '') {
-            setAlanInput('');
-        } else {
-            const val = Number(value);
-            setAlanInput(val >= 0 ? Math.min(val, 1_000_000) : '');
-        }
-    }, []);
-
-    const handleSelectRecommendedMachine = useCallback((machine) => {
-        setSeciliMarka(machine.marka);
-        setSeciliSurus(machine.surus);
-        setSeciliMakineId(machine.id);
-        toast.success(`${machine.marka} ${machine.model} seçildi.`);
-    }, []);
-
     // ── Filtrelenmiş makine listesi ──
     const filtrelenmisMakineler = useMemo(
         () => makineVeritabani.filter(m => m.marka === seciliMarka && m.surus === seciliSurus),
@@ -111,7 +88,9 @@ export default function Dashboard() {
     }, [seciliKategori, aparatVeritabani]);
 
     const aktifMakine  = makineVeritabani.find(m => m.id === seciliMakineId) || null;
-    const aktifAparat  = aparatVeritabani.find(a => a.id === seciliAparatId) || aparatVeritabani[0] || { ad: '', aciklama: '' };
+    const aktifAparat  = seciliAparatId 
+        ? (aparatVeritabani.find(a => a.id === seciliAparatId) || { ad: '', aciklama: '' }) 
+        : { ad: '', aciklama: 'Uyarı: Herhangi bir ped veya fırça seçmediniz. Lütfen operasyon türünüze uygun bir aparat seçin.' };
 
     // Ped önerisi zemin/kir yoğunluğuna bağlı — makine seçiminden bağımsız hesaplanır
     const onerilenPedler = useMemo(() => getAkilliPedOnerisi(zemin, kirYogunlugu), [zemin, kirYogunlugu]);
@@ -162,9 +141,20 @@ export default function Dashboard() {
             
             const element = document.getElementById('report-content');
             
+            // PDF fix - mobilde de düzgün çıkması için sabit genişlik
+            const originalWidth = element.style.width;
+            const originalMaxWidth = element.style.maxWidth;
+            element.style.width = '800px';
+            element.style.maxWidth = 'none';
+            
             const dataUrl = await htmlToImage.toJpeg(element, {
                 quality: 0.98, backgroundColor: '#ffffff', pixelRatio: 2,
             });
+
+            // Eski haline geri çevir
+            element.style.width = originalWidth;
+            element.style.maxWidth = originalMaxWidth;
+
             const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
             const imgProps  = pdf.getImageProperties(dataUrl);
             const pdfWidth  = pdf.internal.pageSize.getWidth();
@@ -201,7 +191,7 @@ export default function Dashboard() {
         aktifAparat.ad, aktifAparat.aciklama,
         hesaplamalar.kimyasal.aciklama, hesaplamalar.kimyasal.dozajYuzdesi, hesaplamalar.isTwister,
         hesaplamalar.netYikamaDk, hesaplamalar.doldurBosaltDk, hesaplamalar.toplamOperasyonDk,
-        hesaplamalar.kaynakSuTuketimi, hesaplamalar.gerekliAdet, hesaplamalar.teorikOmur,
+        hesaplamalar.kaynakSuTuketimi, hesaplamalar.gerekliAdet, hesaplamalar.teorikOmur, isCilaliZemin
     ) : '';
 
     return (
@@ -227,6 +217,7 @@ export default function Dashboard() {
                     zemin={zemin}
                     kirTuru={kirTuru}
                     kirYogunlugu={kirYogunlugu}
+                    isCilaliZemin={isCilaliZemin}
                     seciliMakineId={seciliMakineId}
                     makineYasi={makineYasi}
                     seciliKategori={seciliKategori}
@@ -236,30 +227,57 @@ export default function Dashboard() {
                     setZemin={setZemin}
                     setKirTuru={setKirTuru}
                     setKirYogunlugu={setKirYogunlugu}
+                    setIsCilaliZemin={setIsCilaliZemin}
                     setSeciliMakineId={setSeciliMakineId}
                     setMakineYasi={setMakineYasi}
                     setSeciliKategori={setSeciliKategori}
                     setSeciliAparatId={setSeciliAparatId}
                     onSelectRecommendedMachine={handleSelectRecommendedMachine}
+                    onScrollToResults={scrollToResults}
                 />
 
                 {(!aktifMakine || !hesaplamalar) ? (
-                    <div className="lg:col-span-8 xl:col-span-9 glass-card rounded-3xl h-full flex flex-col items-center justify-center p-12 text-slate-400 min-h-[400px]">
-                        <Settings className="w-16 h-16 mb-4 opacity-30 animate-spin-slow" />
-                        <p className="font-medium text-lg text-center">Sistem analizi için sol menüden geçerli bir makine modeli seçin.</p>
+                    <div className="lg:col-span-8 xl:col-span-9 glass-card rounded-3xl h-full flex flex-col items-center justify-center p-8 md:p-12 text-slate-500 min-h-[400px] shadow-lg shadow-slate-200/50">
+                        <div className="bg-indigo-50 text-indigo-600 p-4 rounded-full mb-6 shadow-inner">
+                            <Settings className="w-12 h-12 animate-spin-slow" />
+                        </div>
+                        <h2 className="text-2xl font-black text-slate-800 mb-2">Sistem Analizi Bekleniyor</h2>
+                        <p className="text-center font-medium max-w-md mb-10">
+                            Operasyonel maliyet, zaman ve kaynak tüketimi sonuçlarını görmek için sol taraftaki formu doldurun.
+                        </p>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-3xl">
+                            <div className="bg-white/60 p-5 rounded-2xl border border-gray-100 flex flex-col items-center text-center shadow-sm">
+                                <span className="text-3xl mb-3">🏢</span>
+                                <h3 className="font-bold text-slate-700 text-sm">1. Alan ve Zemin</h3>
+                                <p className="text-xs text-slate-500 mt-1">Tesis ve kirlilik bilgilerini girin.</p>
+                            </div>
+                            <div className="bg-white/60 p-5 rounded-2xl border border-gray-100 flex flex-col items-center text-center shadow-sm">
+                                <span className="text-3xl mb-3">⚙️</span>
+                                <h3 className="font-bold text-slate-700 text-sm">2. Makine ve Ped</h3>
+                                <p className="text-xs text-slate-500 mt-1">Akıllı önerileri kullanın.</p>
+                            </div>
+                            <div className="bg-white/60 p-5 rounded-2xl border border-gray-100 flex flex-col items-center text-center shadow-sm">
+                                <span className="text-3xl mb-3">📊</span>
+                                <h3 className="font-bold text-slate-700 text-sm">3. Rapor İnceleme</h3>
+                                <p className="text-xs text-slate-500 mt-1">Maliyetleri PDF'e aktarın.</p>
+                            </div>
+                        </div>
                     </div>
                 ) : (
-                    <ResultPanel
-                        aktifMakine={aktifMakine}
-                        aktifAparat={aktifAparat}
-                        hesaplamalar={hesaplamalar}
-                        isSaving={isSaving}
-                        saveSuccess={saveSuccess}
-                        onSaveReport={saveReport}
-                        isExporting={isExporting}
-                        onExportPDF={exportPDF}
-                        onOpenScenario={handleOpenScenario}
-                    />
+                    <div ref={resultsRef} className="lg:col-span-8 xl:col-span-9">
+                        <ResultPanel
+                            aktifMakine={aktifMakine}
+                            aktifAparat={aktifAparat}
+                            hesaplamalar={hesaplamalar}
+                            isSaving={isSaving}
+                            saveSuccess={saveSuccess}
+                            onSaveReport={saveReport}
+                            isExporting={isExporting}
+                            onExportPDF={exportPDF}
+                            onOpenScenario={handleOpenScenario}
+                        />
+                    </div>
                 )}
             </div>
 
