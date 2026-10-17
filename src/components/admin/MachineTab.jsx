@@ -14,7 +14,7 @@ export function MachineTab({ confirmDelete }) {
     const [sortOrder, setSortOrder] = useState('marka-asc');
     
     const emptyMakine = {
-        marka: '', model: '', surus: '', fircaSayisi: '1', calismaGenisligi: '',
+        marka: '', model: '', surus: '', fircaTipi: 'Disk', fircaSayisi: '1', calismaGenisligi: '',
         siliciLastikGenisligi: '', fircaPedEbatlari: '', fircaBasinci: '', solusyonTuketimi: '',
         boyutlar: '', temizSuTanki: '', kirliSuTanki: '',
         teorikPerformans: '', pratikPerformans: '', tekSarjSure: '', tamSarjSure: '',
@@ -41,6 +41,7 @@ export function MachineTab({ confirmDelete }) {
         setMakine({
             marka: m.marka || '', model: m.model || '',
             surus: m.surus || '',
+            fircaTipi: m.fircaTipi || 'Disk',
             fircaSayisi: m.fircaSayisi?.toString() || '1',
             calismaGenisligi: m.calismaGenisligi || '',
             siliciLastikGenisligi: m.siliciLastikGenisligi || '',
@@ -231,6 +232,27 @@ export function MachineTab({ confirmDelete }) {
                     { name: 'marka',                 label: 'Marka',                    type: 'text'   },
                     { name: 'model',                 label: 'Model',                    type: 'text'   },
                     { name: 'surus',                 label: 'Sürüş Tipi',               type: 'text',   req: false },
+                ].map(({ name, label, type, req = true }) => (
+                    <div key={name}>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">{label}</label>
+                        <input
+                            required={req}
+                            type={type}
+                            name={name}
+                            value={makine[name]}
+                            onChange={handleMakineChange}
+                            className={inputCls}
+                        />
+                    </div>
+                ))}
+                <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">Fırça Kafa Tipi</label>
+                    <select name="fircaTipi" value={makine.fircaTipi || 'Disk'} onChange={handleMakineChange} className={inputCls}>
+                        <option value="Disk">Disk Kafa (Ped ve Fırça Uyumlu)</option>
+                        <option value="Silindirik">Silindirik / Rulo Kafa (Sadece Rulo Fırça)</option>
+                    </select>
+                </div>
+                {[
                     { name: 'fircaSayisi',           label: 'Fırça/Ped Sayısı (Adet)',  type: 'number', min: '1' },
                     { name: 'calismaGenisligi',      label: 'Çalışma Genişliği (cm)',   type: 'number' },
                     { name: 'siliciLastikGenisligi', label: 'Silici Lastik Genişliği (cm)', type: 'number', req: false },

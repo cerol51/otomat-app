@@ -4,7 +4,14 @@ import { toast } from 'react-hot-toast';
 import { ArrowDown } from 'lucide-react';
 import { InputWrap } from '../InputWrap';
 import { MachineRecommendation } from './MachineRecommendation';
-import { isPvcOrVinyl, isNaturalStone } from '../../utils/helpers';
+import {
+    isPvcOrVinyl,
+    isNaturalStone,
+    hasHeavyDirt,
+    getMachineHeadType,
+    isBrush,
+    normalizeString
+} from '../../utils/helpers';
 
 /**
  * Dashboard'un sol sütunu: alan/tesis bilgileri ve makine/aparat seçimi.
@@ -14,7 +21,7 @@ export function InputPanel({
     // Veri listeleri
     zeminTipleri, sektorelVeriler, kirYogunluklari, yasSecenekleri,
     markalar, surusTipleri, kategoriler, aparatVeritabani, makineVeritabani,
-    filtrelenmisMakineler, onerilenPedler,
+    filtrelenmisMakineler, aktifMakine, onerilenPedler,
     // Form değerleri
     musteriAdi, alanInput, sektor, zemin, kirTuru, kirYogunlugu, isCilaliZemin,
     seciliMarka, seciliSurus, seciliMakineId, makineYasi,
@@ -36,6 +43,11 @@ export function InputPanel({
     const filtrelenmisAparatlar = useMemo(
         () => aparatVeritabani.filter(a => !seciliKategori || a.kategori === seciliKategori),
         [aparatVeritabani, seciliKategori]
+    );
+    const kafaTipi = useMemo(() => getMachineHeadType(aktifMakine), [aktifMakine]);
+    const isSiraliRestorasyon = useMemo(
+        () => isNaturalStone(zemin) && hasHeavyDirt(kirYogunlugu) && !isCilaliZemin,
+        [zemin, kirYogunlugu, isCilaliZemin]
     );
 
     return (
@@ -231,34 +243,57 @@ export function InputPanel({
                         </InputWrap>
                     </div>
 
+                    {/* Makine Kafa Tipi (Disk vs Silindirik) Mühendislik Bildirimi */}
+                    {aktifMakine && (
+                        <div className={`mt-1 mb-3 px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
+                            kafaTipi === 'Silindirik'
+                                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                                : 'bg-emerald-50/70 border-emerald-200/80 text-emerald-800'
+                        }`}>
+                            <span>{kafaTipi === 'Silindirik' ? '⚠️' : '💿'}</span>
+                            <span>
+                                {kafaTipi === 'Silindirik'
+                                    ? 'Silindirik (Rulo) Fırça Kafası: Yuvarlak ped takılamaz, sadece Rulo/Yıkama Fırçası seçilmelidir.'
+                                    : 'Disk Fırça Kafası: Ped tutucu ile tüm yuvarlak pedler ve disk fırçalar kullanılabilir.'}
+                            </span>
+                        </div>
+                    )}
+
                     {/* Akıllı Ped Önerisi */}
                     {(zemin && kirTuru && kirYogunlugu) && (
                         <motion.div
                             key={onerilenPedler.join(',')}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="mt-5 mb-5 p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 flex items-start gap-3 shadow-sm"
+                            className="mt-4 mb-5 p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 flex items-start gap-3 shadow-sm"
                         >
                             <span className="text-xl mt-0.5">💡</span>
                             <div className="flex-1">
-                                <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider mb-2">Akıllı Sistem Önerisi</p>
+                                <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wider mb-1.5">
+                                    Akıllı Sistem Önerisi {kafaTipi === 'Silindirik' ? '(Rulo Kafa Uyumlu)' : ''}
+                                </p>
+                                {isSiraliRestorasyon && kafaTipi !== 'Silindirik' && (
+                                    <p className="text-[11px] font-semibold text-indigo-700 bg-indigo-50/90 border border-indigo-200 rounded-lg px-2.5 py-1 mb-2">
+                                        💎 Doğal Taş Restorasyonu 3 Adımlı Sıralı İşlemdir: 1. Twister Beyaz → 2. Twister Sarı → 3. Twister Yeşil
+                                    </p>
+                                )}
                                 <div className="flex flex-wrap gap-2">
                                     {onerilenPedler.length > 0 ? (
-                                        onerilenPedler.map(ped => {
-                                            const normalizedPed = (ped || '').toLowerCase().replace(/ı/g, 'i');
+                                        onerilenPedler.map((ped, idx) => {
+                                            const normalizedPed = normalizeString(ped || '');
                                             let aparat = aparatVeritabani.find(a => {
-                                                const normalizedAd = (a.ad || '').toLowerCase().replace(/ı/g, 'i');
+                                                const normalizedAd = normalizeString(a.ad || '');
                                                 return normalizedAd === normalizedPed;
                                             });
                                             if (!aparat) {
                                                 const matches = aparatVeritabani.filter(a => {
-                                                    const normalizedAd = (a.ad || '').toLowerCase().replace(/ı/g, 'i');
+                                                    const normalizedAd = normalizeString(a.ad || '');
                                                     return normalizedAd.includes(normalizedPed) || normalizedPed.includes(normalizedAd);
                                                 });
                                                 if (matches.length > 0) {
                                                     const hasTwister = normalizedPed.includes('twister');
                                                     const bestMatch = matches.find(m => {
-                                                        const mAd = (m.ad || '').toLowerCase().replace(/ı/g, 'i');
+                                                        const mAd = normalizeString(m.ad || '');
                                                         return mAd.includes('twister') === hasTwister;
                                                     });
                                                     aparat = bestMatch || matches[0];
@@ -275,7 +310,7 @@ export function InputPanel({
                                             else if (normalizedPed.includes('siyah')) colorClass = 'bg-gray-800 text-white border-gray-900 hover:bg-gray-900 shadow-sm';
                                             else if (normalizedPed.includes('beyaz')) colorClass = 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100 shadow-sm';
                                             else if (normalizedPed.includes('sari')) colorClass = 'bg-yellow-50 text-yellow-700 border-yellow-300 hover:bg-yellow-100 shadow-sm';
-                                            else if (normalizedPed.includes('tynex')) colorClass = 'bg-stone-100 text-stone-700 border-stone-400 hover:bg-stone-200 shadow-sm font-bold';
+                                            else if (normalizedPed.includes('tynex') || normalizedPed.includes('firca')) colorClass = 'bg-stone-100 text-stone-700 border-stone-400 hover:bg-stone-200 shadow-sm font-bold';
                                             else if (normalizedPed.includes('melamin')) colorClass = 'bg-indigo-50 text-indigo-700 border-indigo-300 hover:bg-indigo-100 shadow-sm';
                                             
                                             return (
@@ -298,7 +333,7 @@ export function InputPanel({
                                                     }`}
                                                     disabled={!aparat}
                                                 >
-                                                    {ped}
+                                                    {isSiraliRestorasyon && idx < 3 && normalizedPed.includes('twister') ? `${idx + 1}. ${ped}` : ped}
                                                 </button>
                                             );
                                         })
@@ -312,7 +347,7 @@ export function InputPanel({
 
                     {/* Ped/Fırça Seçimi */}
                     <div className="border-t border-gray-100/80 pt-4">
-                        <InputWrap label="Ped Kategorisi" htmlFor="pedKategoriSelect">
+                        <InputWrap label="Ped / Fırça Kategorisi" htmlFor="pedKategoriSelect">
                             <select
                                 id="pedKategoriSelect"
                                 value={seciliKategori}
@@ -330,7 +365,7 @@ export function InputPanel({
                                 ))}
                             </select>
                         </InputWrap>
-                        <InputWrap label="Ped Türleri" htmlFor="pedTurleriSelect">
+                        <InputWrap label="Ped / Fırça Türleri" htmlFor="pedTurleriSelect">
                             <select
                                 id="pedTurleriSelect"
                                 value={seciliAparatId ?? ''}
@@ -338,11 +373,14 @@ export function InputPanel({
                                 className="w-full border-2 border-emerald-400/60 bg-white/80 text-slate-900 rounded-xl p-2.5 text-sm font-bold focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 outline-none cursor-pointer shadow-sm"
                             >
                                 <option value="">Seçiniz...</option>
-                                {filtrelenmisAparatlar.map(a => (
-                                    <option key={a.id} value={a.id}>
-                                        {a.ad.replace('Klasik ', '')}
-                                    </option>
-                                ))}
+                                {filtrelenmisAparatlar.map(a => {
+                                    const ruloUyumsuz = kafaTipi === 'Silindirik' && !isBrush(a.ad);
+                                    return (
+                                        <option key={a.id} value={a.id}>
+                                            {a.ad.replace('Klasik ', '')}{ruloUyumsuz ? ' (⚠️ Rulo Kafaya Uymaz)' : ''}
+                                        </option>
+                                    );
+                                })}
                             </select>
                         </InputWrap>
                     </div>

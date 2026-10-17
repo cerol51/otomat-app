@@ -25,7 +25,8 @@ export function ResultPanel({
     const [showCostInputs, setShowCostInputs] = useState(false);
 
     const {
-        pratikM2, kaynakSuTuketimi, kimyasal, isTwister,
+        pratikM2, kaynakSuTuketimi, kimyasal, isTwister, isFirca,
+        kafaTipi, operasyonModu, basincBilgisi,
         netYikamaDk, doldurBosaltDk, toplamOperasyonDk,
         akuDurumText, akuDurumTipi, uyumDurumu, uyumMesaji,
         teorikOmur, yipranmaOrani, gerekliAdet,
@@ -44,7 +45,7 @@ export function ResultPanel({
     // Ped maliyeti: Bu operasyondaki yıpranma oranına düşen amortisman maliyeti
     const yipranmaOraniNum = parseFloat((yipranmaOrani || '0').replace(',', '.')) / 100;
     const fircaSayisi      = Number(aktifMakine.fircaSayisi) || 1;
-    const pedAmortismanMaliyeti = Math.min(gerekliAdet, Math.max(yipranmaOraniNum * fircaSayisi, 0.01)) * (birimMaliyetler?.pedAdetFiyat || 0);
+    const pedAmortismanMaliyeti = Math.min(gerekliAdet, Math.max(yipranmaOraniNum * fircaSayisi, 0.005)) * (birimMaliyetler?.pedAdetFiyat || 0);
     const iscilikMaliyeti  = (toplamOperasyonDk / 60) * (birimMaliyetler?.iscilikSaatFiyat || 0);
     const toplamOperasyonMaliyeti = suMaliyeti + kimyasalMaliyeti + pedAmortismanMaliyeti + iscilikMaliyeti;
     const aylikMaliyet     = toplamOperasyonMaliyeti * 26; // Ayda 26 iş günü varsayımı
@@ -113,12 +114,12 @@ export function ResultPanel({
                         <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold mb-1.5">Seçilen Ekipman</p>
                         <h2 className="text-3xl font-black text-slate-900">{aktifMakine.model}</h2>
                         <p className="text-sm text-slate-500 mt-1 font-medium">
-                            {aktifMakine.marka} <span className="text-slate-300 mx-1">|</span> {aktifMakine.surus}
+                            {aktifMakine.marka} <span className="text-slate-300 mx-1">|</span> {aktifMakine.surus} <span className="text-slate-300 mx-1">|</span> <span className="text-indigo-600 font-semibold">{kafaTipi} Kafa</span>
                         </p>
                     </div>
                     <div className="z-10 flex gap-3 text-center sm:text-right">
                         <div className="bg-white/70 backdrop-blur-sm px-4 py-3 rounded-xl border border-blue-100/80 shadow-sm">
-                            <p className="text-[10px] text-blue-600 uppercase tracking-wider font-bold mb-0.5">Tek Şarj Kapasitesi</p>
+                            <p className="text-[10px] text-blue-600 uppercase tracking-wider font-bold mb-0.5">Efektif Tek Şarj Alanı</p>
                             <p className="text-2xl font-mono font-bold text-blue-700">
                                 {aktifMakine.surus === 'Kablolu' ? 'Sınırsız' : Math.round(maxYikamaKapasitesi).toLocaleString('tr-TR')} <span className="text-sm font-sans text-blue-500 font-semibold">{aktifMakine.surus !== 'Kablolu' ? 'm²' : ''}</span>
                             </p>
@@ -139,29 +140,47 @@ export function ResultPanel({
                         KALİTE KONTROL VE KİMYASAL DOZAJLAMA
                     </div>
                     <div className="flex flex-col divide-y divide-gray-100/80">
-                        <TableRow label="Makine Ped / Fırça Ebadı:">
-                            <span className="font-bold text-slate-900 bg-indigo-50/80 px-3 py-1 rounded-full border border-indigo-100 text-xs">
-                                {hesaplananEbat}
-                            </span>
+                        <TableRow label="Fırça/Ped Ebadı ve Birim Basınç:">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-bold text-slate-900 bg-indigo-50/80 px-3 py-1 rounded-full border border-indigo-100 text-xs">
+                                    {hesaplananEbat} ({kafaTipi})
+                                </span>
+                                {basincBilgisi && (
+                                    <span className="font-bold text-slate-700 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 text-xs">
+                                        Baskı: {basincBilgisi.etiket}
+                                    </span>
+                                )}
+                            </div>
                         </TableRow>
                         <TableRow label="Ped/Fırça Kullanım Senaryosu:" bg="bg-slate-50/30">
-                            <span className="font-bold text-slate-900">{aktifAparat.ad || 'Ped Seçilmedi'}:</span>{' '}
+                            <span className="font-bold text-slate-900">{aktifAparat.ad || 'Aparat Seçilmedi'}:</span>{' '}
                             <span className="text-slate-600">{aktifAparat.aciklama}</span>
                         </TableRow>
                         <TableRow label="Kimyasal Türü ve Dozajı:">
-                            <span className={`font-medium px-3 py-1 rounded-full text-xs border ${
-                                kimyasal.litre === '0'
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                    : 'bg-amber-50 text-amber-700 border-amber-200'
-                            }`}>
-                                {kimyasal.litre === '0'
-                                    ? kimyasal.aciklama
-                                    : `Max. %${kimyasal.dozajYuzdesi.toFixed(1)} – ${kimyasal.aciklama}`
-                                }
-                            </span>
+                            <div className="flex flex-col gap-1.5">
+                                <div>
+                                    <span className={`inline-block font-medium px-3 py-1 rounded-full text-xs border ${
+                                        kimyasal.aciklama.includes('YASAK')
+                                            ? 'bg-rose-50 text-rose-700 border-rose-200 font-bold'
+                                            : kimyasal.litre === '0'
+                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                                    }`}>
+                                        {kimyasal.litre === '0'
+                                            ? kimyasal.aciklama
+                                            : `Max. %${kimyasal.dozajYuzdesi.toFixed(1)} – ${kimyasal.aciklama}`
+                                        }
+                                    </span>
+                                </div>
+                                {kimyasal.uyari && (
+                                    <p className="text-xs font-semibold text-amber-800 bg-amber-50/70 border border-amber-200/70 rounded-lg px-3 py-1.5">
+                                        💡 {kimyasal.uyari}
+                                    </p>
+                                )}
+                            </div>
                         </TableRow>
-                        <TableRow label="Ped Uyumluluk Durumu:" bg="bg-slate-50/30">
-                            <span className={`px-4 py-1.5 rounded-full text-xs font-bold border shadow-sm ${STATUS_COLORS[uyumDurumu]}`}>
+                        <TableRow label="Aparat & Zemin Uyumluluk Durumu:" bg="bg-slate-50/30">
+                            <span className={`inline-block px-4 py-1.5 rounded-xl text-xs font-bold border shadow-sm ${STATUS_COLORS[uyumDurumu]}`}>
                                 {uyumMesaji}
                             </span>
                         </TableRow>
@@ -175,6 +194,27 @@ export function ResultPanel({
                         OPERASYONEL ZAMAN VE KAYNAK ANALİZİ
                     </div>
                     <div className="flex flex-col divide-y divide-gray-100/80">
+                        {operasyonModu && (
+                            <TableRow label="Operasyon Yıkama Modu:" bg="bg-slate-50/30">
+                                <div className="flex flex-col gap-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                                            operasyonModu.ciftGecisMi
+                                                ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                                : 'bg-sky-50 text-sky-700 border-sky-200'
+                                        }`}>
+                                            {operasyonModu.modAdi}
+                                        </span>
+                                        {operasyonModu.sureCarpani !== 1.0 && (
+                                            <span className="text-xs text-slate-500 font-semibold">
+                                                (Süre Çarpanı: {operasyonModu.sureCarpani}x{operasyonModu.beklemeSuresiDk > 0 ? ` + ${operasyonModu.beklemeSuresiDk} dk reaksiyon` : ''})
+                                            </span>
+                                        )}
+                                    </div>
+                                    <span className="text-xs text-slate-500">{operasyonModu.aciklama}</span>
+                                </div>
+                            </TableRow>
+                        )}
                         <TableRow label="Kaynak Tüketimi (Su/Kimyasal):">
                             <span className="text-blue-500 mr-1.5 text-lg leading-none">💧</span>
                             <span className="text-slate-700">Su: <b className="text-slate-900">{kaynakSuTuketimi} L</b></span>
@@ -192,15 +232,15 @@ export function ResultPanel({
                             <span className="text-blue-500 mr-1.5 text-lg leading-none">🧽</span>
                             <span className="text-slate-700">
                                 Tüketim: <b className="text-slate-900">{gerekliAdet} adet</b>{' '}
-                                {isTwister ? 'ped' : 'fırça/ped'}
+                                {isFirca ? 'fırça' : 'ped'}
                             </span>
                         </TableRow>
-                        <TableRow label="Akü (Şarj) Uygunluk Durumu:" bg="bg-slate-50/30">
-                            <span className={`px-4 py-1.5 rounded-full text-xs font-bold border shadow-sm ${STATUS_COLORS[akuDurumTipi]}`}>
+                        <TableRow label="Akü (Şarj) ve Vardiya Uygunluğu:">
+                            <span className={`inline-block px-4 py-1.5 rounded-xl text-xs font-bold border shadow-sm ${STATUS_COLORS[akuDurumTipi]}`}>
                                 {akuDurumText}
                             </span>
                         </TableRow>
-                        <TableRow label="Doldur/Boşalt Detayı">
+                        <TableRow label="Doldur/Boşalt Detayı" bg="bg-slate-50/30">
                             <span className="text-slate-500 text-sm">Toplam Su:</span>{' '}
                             <span className="font-bold text-slate-900">{kaynakSuTuketimi} L</span>
                             <span className="mx-2 text-slate-300">|</span>
@@ -213,7 +253,7 @@ export function ResultPanel({
                             <span className="text-slate-500 text-sm">Süre/Sefer:</span>{' '}
                             <span className="font-bold text-slate-900">{tankDoldurmaSuresi} dk</span>
                         </TableRow>
-                        <TableRow label="Zaman Etüdü (Görsel)" bg="bg-slate-50/30">
+                        <TableRow label="Zaman Etüdü (Görsel)">
                             <div className="w-full">
                                 <div className="flex justify-between text-xs text-slate-500 font-medium mb-1">
                                     <span>Net Yıkama: <b className="text-slate-800">{dakikaFormatla(netYikamaDk)}</b></span>

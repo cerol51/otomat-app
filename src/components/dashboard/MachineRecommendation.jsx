@@ -1,19 +1,11 @@
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Zap, CheckCircle } from 'lucide-react';
-import { getYasFaktoru } from '../../utils/calculations';
-
-const getZeminCarpani = (kir) => {
-    switch (kir) {
-        case 'Hafif': return 1.0;
-        case 'Orta': return 1.1;
-        case 'Ağır': return 1.25;
-        case 'Çok Ağır': return 1.5;
-        default: return 1.1;
-    }
-};
+import { getYasFaktoru, getOperasyonModu } from '../../utils/calculations';
+import { getMachineHeadType } from '../../utils/helpers';
 
 export function MachineRecommendation({ alanInput, kirYogunlugu, makineYasi, makineVeritabani, onSelectMachine }) {
+    const opModu = useMemo(() => getOperasyonModu(kirYogunlugu), [kirYogunlugu]);
 
     const recommendations = useMemo(() => {
         const getOptimum = (marka) => {
@@ -36,33 +28,30 @@ export function MachineRecommendation({ alanInput, kirYogunlugu, makineYasi, mak
 
             // Fiziksel kapasiteye göre uygun makineleri filtrele
             const yasFaktoru = getYasFaktoru(makineYasi);
-            const sureCarpani = getZeminCarpani(kirYogunlugu);
+            const sureCarpani = opModu.sureCarpani;
 
             const uygunMakineler = sirali.filter(m => {
                 const pratik = m.pratikPerformans || ((m.teorikPerformans || m.m2 || 0) * 0.80);
                 const tekSarj = m.tekSarjPratikAlan || (pratik * 1.5);
                 const tank = m.temizSuTanki || 0;
                 
-                // 1. Akü/Şarj Kapasitesi: Makine tek şarjda alanı bitirebilmeli (Toleranssız, net kontrol)
-                // Gerçek kapasite, makinenin yıpranma payına (yaş) ve kire göre yavaşlamasına (süre çarpanı) bağlıdır.
+                // 1. Akü/Şarj Kapasitesi: Makine tek şarjda alanı bitirebilmeli (Çift geçiş / ağır kir çarpanı dahil)
                 const gercekTekSarjAlan = (tekSarj * yasFaktoru) / sureCarpani;
                 const akuYeterli = gercekTekSarjAlan >= alanInput;
                 
-                // 2. Su Tankı: Sık su doldur-boşalt yapmamak için tank yeterli olmalı (Maksimum 3-4 depo. tank * 250 >= alan)
-                const tankYeterli = (tank * 250) >= alanInput;
+                // 2. Su Tankı: Sık su doldur-boşalt yapmamak için tank yeterli olmalı (Maksimum 3-4 depo)
+                const tankYeterli = (tank * (opModu.ciftGecisMi ? 180 : 250)) >= alanInput;
                 
-                // 3. Hız/Zaman: İş 3 saatten uzun sürmemeli (çok küçük makine büyük alana verilmemeli)
-                const hizYeterli = (pratik * 3) >= alanInput;
+                // 3. Hız/Zaman: İş 3 saatten uzun sürmemeli
+                const hizYeterli = ((pratik / sureCarpani) * 3) >= alanInput;
                 
                 return akuYeterli && tankYeterli && hizYeterli;
             });
 
-            // Uygun olanlardan en küçüğünü (sıradaki ilkini) seç, gereksiz büyük makine önermemek için.
             if (uygunMakineler.length > 0) {
                 return uygunMakineler[0];
             }
 
-            // Alan çok büyükse ve hiçbir makine tek başına yetmiyorsa, en büyük makineyi öner
             return sirali[sirali.length - 1];
         };
 
@@ -70,7 +59,7 @@ export function MachineRecommendation({ alanInput, kirYogunlugu, makineYasi, mak
             taski: getOptimum('Taski'),
             karcher: getOptimum('Karcher')
         };
-    }, [alanInput, kirYogunlugu, makineYasi, makineVeritabani]);
+    }, [alanInput, makineYasi, makineVeritabani, opModu]);
 
     // Eğer alan çok küçükse (örneğin boş veya < 10) tavsiye göstermeye gerek yok
     if (!alanInput || alanInput < 10) return null;
@@ -80,14 +69,17 @@ export function MachineRecommendation({ alanInput, kirYogunlugu, makineYasi, mak
         if (!machine) return null;
         
         const pratik = Math.round(machine.pratikPerformans || ((machine.teorikPerformans || machine.m2 || 0) * 0.80));
-        const estimatedTime = (alanInput / pratik).toFixed(1);
+        const estimatedTime = ((alanInput / pratik) * opModu.sureCarpani).toFixed(1);
+        const kafaTipi = getMachineHeadType(machine);
 
         return (
             <div className={`p-4 rounded-xl border ${brandColor} ${gradient} shadow-sm flex flex-col justify-between`}>
                 <div>
                     <div className="flex justify-between items-start mb-2">
                         <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{machine.marka}</span>
-                        <span className="text-xs bg-white/80 px-2 py-0.5 rounded text-slate-700 font-medium shadow-sm">{machine.surus}</span>
+                        <span className="text-xs bg-white/80 px-2 py-0.5 rounded text-slate-700 font-medium shadow-sm">
+                            {machine.surus} • {kafaTipi}
+                        </span>
                     </div>
                     <h4 className="text-lg font-bold text-slate-800 mb-2 leading-tight">{machine.model}</h4>
                     
@@ -101,8 +93,8 @@ export function MachineRecommendation({ alanInput, kirYogunlugu, makineYasi, mak
                             <b className="text-slate-800">{machine.calismaGenisligi ? `${machine.calismaGenisligi} cm` : '-'}</b>
                         </div>
                         <div className="flex justify-between text-slate-600">
-                            <span>Tahmini Süre:</span>
-                            <b className="text-slate-800">{estimatedTime} saat</b>
+                            <span>Tahmini Yıkama:</span>
+                            <b className="text-slate-800">{estimatedTime} saat {opModu.ciftGecisMi ? '(Çift Geçiş)' : ''}</b>
                         </div>
                     </div>
                 </div>

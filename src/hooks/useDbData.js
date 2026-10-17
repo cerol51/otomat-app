@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
-const CACHE_KEY = 'otomatDbCacheV5';
+const CACHE_KEY = 'otomatDbCacheV6';
 
 /** sessionStorage cache'ini dışarıdan temizlemek için yardımcı fonksiyon */
 export function invalidateDbCache() {
@@ -38,6 +38,26 @@ export function useDbData() {
 
                 const aparatlarSnap = await getDocs(collection(db, 'aparatlar'));
                 const aparatlar = aparatlarSnap.docs.map(d => ({ ...d.data(), id: d.id }));
+
+                // Endüstriyel Yıkama Fırçası ve Tynex Fırça veritabanında yoksa varsayılan olarak ekle
+                const varsayilanFircalar = [
+                    {
+                        id: 'std-yikama-fircasi',
+                        ad: 'Yıkama Fırçası (Polipropilen)',
+                        kategori: 'Özel Pedler ve Fırçalar',
+                        aciklama: 'Derzli seramik, kaymaz (safety) zeminler, pürüzlü beton ve silindirik/disk makineler için uzun ömürlü standart polipropilen kıl fırça (Ömür: ~250.000 m²).',
+                    },
+                    {
+                        id: 'std-tynex-firca',
+                        ad: 'Tynex Fırça',
+                        kategori: 'Özel Pedler ve Fırçalar',
+                        aciklama: 'Silisyum karbür emdirilmiş ağır hizmet tipi aşındırıcı fırça. Endüstriyel beton, ağır yağ/kir ve kaymaz zeminlerde maksimum kazıma gücü sağlar (Ömür: ~350.000 m²).',
+                    }
+                ];
+                varsayilanFircalar.forEach(vf => {
+                    const varMi = aparatlar.some(a => (a.ad || '').toLowerCase().includes(vf.ad.split(' ')[0].toLowerCase()));
+                    if (!varMi) aparatlar.push(vf);
+                });
                 
                 // Ped kategorisini veritabanındaki aparatlardan dinamik olarak çıkartıyoruz
                 const dinamikKategoriler = [...new Set(aparatlar.map(a => a.kategori).filter(Boolean))];

@@ -96,10 +96,16 @@ export default function Dashboard() {
         ? (aparatVeritabani.find(a => a.id === seciliAparatId) || { ad: '', aciklama: '' }) 
         : { ad: '', aciklama: 'Uyarı: Herhangi bir ped veya fırça seçmediniz. Lütfen operasyon türünüze uygun bir aparat seçin.' };
 
-    // Ped önerisi zemin/kir yoğunluğuna bağlı — makine seçiminden bağımsız hesaplanır
-    const onerilenPedler = useMemo(() => getAkilliPedOnerisi(zemin, kirYogunlugu), [zemin, kirYogunlugu]);
+    // Ped önerisi zemin, kir yoğunluğu, makine kafa tipi ve cila durumuna bağlı hesaplanır
+    const onerilenPedler = useMemo(
+        () => getAkilliPedOnerisi(zemin, kirYogunlugu, aktifMakine, isCilaliZemin),
+        [zemin, kirYogunlugu, aktifMakine, isCilaliZemin]
+    );
 
-    const hesaplamalar = useCalculations({ aktifMakine, aktifAparat, alanInput, sektor, zemin, kirYogunlugu, makineYasi, isCilaliZemin });
+    const hesaplamalar = useCalculations({
+        aktifMakine, aktifAparat, alanInput,
+        sektor, zemin, kirTuru, kirYogunlugu, makineYasi, isCilaliZemin
+    });
 
     // ── Rapor Kaydet ──
     const saveReport = async () => {
@@ -199,7 +205,21 @@ export default function Dashboard() {
         aktifAparat.ad, aktifAparat.aciklama,
         hesaplamalar.kimyasal.aciklama, hesaplamalar.kimyasal.dozajYuzdesi, hesaplamalar.isTwister,
         hesaplamalar.netYikamaDk, hesaplamalar.doldurBosaltDk, hesaplamalar.toplamOperasyonDk,
-        hesaplamalar.kaynakSuTuketimi, hesaplamalar.gerekliAdet, hesaplamalar.teorikOmur, isCilaliZemin
+        hesaplamalar.kaynakSuTuketimi, hesaplamalar.gerekliAdet, hesaplamalar.teorikOmur, isCilaliZemin,
+        {
+            kafaTipi: hesaplamalar.kafaTipi,
+            basincEtiketi: hesaplamalar.basincBilgisi?.etiket,
+            operasyonModuAdi: hesaplamalar.operasyonModu?.modAdi,
+            ciftGecisMi: hesaplamalar.operasyonModu?.ciftGecisMi,
+            beklemeSuresiDk: hesaplamalar.operasyonModu?.beklemeSuresiDk,
+            seferSayisi: hesaplamalar.seferSayisi,
+            akuYeterliMi: hesaplamalar.akuYeterliMi,
+            harcananSaat: hesaplamalar.harcananSaat,
+            kullanilabilirAku: hesaplamalar.kullanilabilirAku,
+            gerekenSarjSayisi: hesaplamalar.gerekenSarjSayisi,
+            tamSarjSure: aktifMakine.tamSarjSure,
+            kimyasalUyari: hesaplamalar.kimyasal?.uyari,
+        }
     ) : '';
 
     return (
@@ -219,6 +239,7 @@ export default function Dashboard() {
                     aparatVeritabani={aparatVeritabani}
                     makineVeritabani={makineVeritabani}
                     filtrelenmisMakineler={filtrelenmisMakineler}
+                    aktifMakine={aktifMakine}
                     onerilenPedler={onerilenPedler}
                     musteriAdi={musteriAdi}
                     alanInput={alanInput}
