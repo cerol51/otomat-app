@@ -16,9 +16,6 @@ const getZeminCarpani = (kir) => {
 export function MachineRecommendation({ alanInput, kirYogunlugu, makineYasi, makineVeritabani, onSelectMachine }) {
 
     const recommendations = useMemo(() => {
-        // En az 30 dakika sürecek (pratik <= alan * 2) olan en hızlı (en yüksek kapasiteli) makineyi bul
-        const maxMantikiKapasite = alanInput * 2; 
-
         const getOptimum = (marka) => {
             const makineler = makineVeritabani.filter(m => {
                 if (m.marka.toLowerCase() !== marka.toLowerCase()) return false;
@@ -29,8 +26,8 @@ export function MachineRecommendation({ alanInput, kirYogunlugu, makineYasi, mak
 
             // Sıralama: Pratik Performans'a göre artan şekilde
             const sirali = [...makineler].sort((a, b) => {
-                const pratikA = a.pratikPerformans || ((a.teorikPerformans || a.m2 || 0) * 0.65);
-                const pratikB = b.pratikPerformans || ((b.teorikPerformans || b.m2 || 0) * 0.65);
+                const pratikA = a.pratikPerformans || ((a.teorikPerformans || a.m2 || 0) * 0.80);
+                const pratikB = b.pratikPerformans || ((b.teorikPerformans || b.m2 || 0) * 0.80);
                 if (Math.abs(pratikA - pratikB) < 1) {
                     return (a.calismaGenisligi || 0) - (b.calismaGenisligi || 0);
                 }
@@ -42,7 +39,7 @@ export function MachineRecommendation({ alanInput, kirYogunlugu, makineYasi, mak
             const sureCarpani = getZeminCarpani(kirYogunlugu);
 
             const uygunMakineler = sirali.filter(m => {
-                const pratik = m.pratikPerformans || ((m.teorikPerformans || m.m2 || 0) * 0.65);
+                const pratik = m.pratikPerformans || ((m.teorikPerformans || m.m2 || 0) * 0.80);
                 const tekSarj = m.tekSarjPratikAlan || (pratik * 1.5);
                 const tank = m.temizSuTanki || 0;
                 
@@ -73,7 +70,7 @@ export function MachineRecommendation({ alanInput, kirYogunlugu, makineYasi, mak
             taski: getOptimum('Taski'),
             karcher: getOptimum('Karcher')
         };
-    }, [alanInput, makineVeritabani]);
+    }, [alanInput, kirYogunlugu, makineYasi, makineVeritabani]);
 
     // Eğer alan çok küçükse (örneğin boş veya < 10) tavsiye göstermeye gerek yok
     if (!alanInput || alanInput < 10) return null;
@@ -82,7 +79,7 @@ export function MachineRecommendation({ alanInput, kirYogunlugu, makineYasi, mak
     const renderCard = (machine, brandColor, gradient) => {
         if (!machine) return null;
         
-        const pratik = Math.round(machine.pratikPerformans || ((machine.teorikPerformans || machine.m2 || 0) * 0.65));
+        const pratik = Math.round(machine.pratikPerformans || ((machine.teorikPerformans || machine.m2 || 0) * 0.80));
         const estimatedTime = (alanInput / pratik).toFixed(1);
 
         return (

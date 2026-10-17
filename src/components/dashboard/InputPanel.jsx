@@ -16,11 +16,11 @@ export function InputPanel({
     markalar, surusTipleri, kategoriler, aparatVeritabani, makineVeritabani,
     filtrelenmisMakineler, onerilenPedler,
     // Form değerleri
-    alanInput, sektor, zemin, kirTuru, kirYogunlugu, isCilaliZemin,
+    musteriAdi, alanInput, sektor, zemin, kirTuru, kirYogunlugu, isCilaliZemin,
     seciliMarka, seciliSurus, seciliMakineId, makineYasi,
     seciliKategori, seciliAparatId,
     // Event handler'lar
-    handleAlanChange, handleSektorChange,
+    setMusteriAdi, handleAlanChange, handleSektorChange,
     setZemin, setKirTuru, setKirYogunlugu, setIsCilaliZemin,
     setSeciliMarka, setSeciliSurus, setSeciliMakineId,
     setMakineYasi, setSeciliKategori, setSeciliAparatId,
@@ -33,7 +33,10 @@ export function InputPanel({
     // ── Memoized Options ──
     const sektorOptions = useMemo(() => Object.keys(sektorelVeriler || {}), [sektorelVeriler]);
     const kirTuruOptions = useMemo(() => sektorelVeriler[sektor]?.kirler || [], [sektorelVeriler, sektor]);
-    const filtrelenmisAparatlar = useMemo(() => aparatVeritabani.filter(a => a.kategori === seciliKategori), [aparatVeritabani, seciliKategori]);
+    const filtrelenmisAparatlar = useMemo(
+        () => aparatVeritabani.filter(a => !seciliKategori || a.kategori === seciliKategori),
+        [aparatVeritabani, seciliKategori]
+    );
 
     return (
         <motion.div
@@ -48,6 +51,18 @@ export function InputPanel({
                     <span>1. Alan ve Tesis Bilgileri</span>
                 </div>
                 <div className="p-5">
+                    <InputWrap label="Müşteri / Tesis Adı (Opsiyonel)" htmlFor="musteriAdiInput">
+                        <input
+                            id="musteriAdiInput"
+                            type="text"
+                            maxLength={80}
+                            placeholder="Örn: X Lojistik Merkez Depo"
+                            value={musteriAdi || ''}
+                            onChange={e => setMusteriAdi(e.target.value)}
+                            className="w-full border border-gray-200/80 bg-white/60 rounded-xl p-2.5 text-sm font-medium text-slate-900 focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all shadow-sm"
+                        />
+                    </InputWrap>
+
                     <InputWrap label="Alan (m²)" htmlFor="alanInput">
                         <input
                             id="alanInput"

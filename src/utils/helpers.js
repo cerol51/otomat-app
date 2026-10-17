@@ -86,7 +86,6 @@ export const isSafetyFloor = (zemin) => {
 
 export const getIncompatibilityReason = (padName, zemin, kirYogunlugu) => {
     const padLower = normalizeString(padName);
-    const zeminLower = normalizeString(zemin);
     
     // Güvenlik/Kaymaz zeminler
     if (isSafetyFloor(zemin)) {

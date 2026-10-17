@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Settings } from 'lucide-react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -16,21 +17,26 @@ import { ScenarioModal } from '../components/dashboard/ScenarioModal';
 export default function Dashboard() {
     const { dbData, isLoading, error } = useDbData();
     const { currentUser } = useAuth();
+    const location = useLocation();
+    const navigate = useNavigate();
 
     // ── Form State (Hook ile yönetiliyor) ──
     const {
+        musteriAdi, setMusteriAdi,
         alanInput, handleAlanChange,
         sektor, handleSektorChange,
         zemin, setZemin,
         kirTuru, setKirTuru,
         kirYogunlugu, setKirYogunlugu,
         isCilaliZemin, setIsCilaliZemin,
-        seciliMarka, setSeciliMarka, handleMarkaChange,
-        seciliSurus, setSeciliSurus, handleSurusChange,
-        seciliKategori, setSeciliKategori, handleKategoriChange,
+        seciliMarka, handleMarkaChange,
+        seciliSurus, handleSurusChange,
+        seciliKategori, handleKategoriChange,
         seciliAparatId, setSeciliAparatId,
         seciliMakineId, setSeciliMakineId, handleSelectRecommendedMachine,
-        makineYasi, setMakineYasi
+        makineYasi, setMakineYasi,
+        birimMaliyetler, handleMaliyetChange,
+        loadFromReport,
     } = useDashboardForm(dbData?.sektorelVeriler || {});
 
     // ── UI State ──
@@ -53,17 +59,19 @@ export default function Dashboard() {
         if (error) toast.error('Veritabanına bağlanılamadı: ' + error.message);
     }, [error]);
 
-    // ── Varsayılan değerleri atama iptal edildi, kutular boş başlar ──
-    useEffect(() => {
-        if (!dbData) return;
-        // dbData sadece yüklendiğinde başka işlemler yapılması gerekirse buraya eklenebilir.
-    }, [dbData]);
-
     const {
         zeminTipleri = [], sektorelVeriler = {}, kirYogunluklari = [],
         yasSecenekleri = [], makineVeritabani = [], aparatVeritabani = [],
         kategoriler = [],
     } = dbData || {};
+
+    // ── Geçmiş Rapordan Geri Yükleme Desteği ──
+    useEffect(() => {
+        if (!dbData || !location.state?.loadReport) return;
+        loadFromReport(location.state.loadReport, makineVeritabani, aparatVeritabani);
+        toast.success('Rapor verileri hesaplayıcıya yüklendi!');
+        navigate(location.pathname, { replace: true, state: {} });
+    }, [dbData, location.state, location.pathname, loadFromReport, makineVeritabani, aparatVeritabani, navigate]);
 
     // ── Dinamik Marka ve Sürüş Tipi Üretimi ──
     const dinamikMarkalar = useMemo(() => {
@@ -83,10 +91,6 @@ export default function Dashboard() {
         [seciliMarka, seciliSurus, makineVeritabani]
     );
 
-    useEffect(() => {
-        setSeciliAparatId('');
-    }, [seciliKategori, aparatVeritabani]);
-
     const aktifMakine  = makineVeritabani.find(m => m.id === seciliMakineId) || null;
     const aktifAparat  = seciliAparatId 
         ? (aparatVeritabani.find(a => a.id === seciliAparatId) || { ad: '', aciklama: '' }) 
@@ -95,7 +99,7 @@ export default function Dashboard() {
     // Ped önerisi zemin/kir yoğunluğuna bağlı — makine seçiminden bağımsız hesaplanır
     const onerilenPedler = useMemo(() => getAkilliPedOnerisi(zemin, kirYogunlugu), [zemin, kirYogunlugu]);
 
-    const hesaplamalar = useCalculations({ aktifMakine, aktifAparat, alanInput, sektor, zemin, kirYogunlugu, makineYasi });
+    const hesaplamalar = useCalculations({ aktifMakine, aktifAparat, alanInput, sektor, zemin, kirYogunlugu, makineYasi, isCilaliZemin });
 
     // ── Rapor Kaydet ──
     const saveReport = async () => {
@@ -106,9 +110,12 @@ export default function Dashboard() {
             await addDoc(collection(db, 'reports'), {
                 userId: currentUser.uid,
                 createdAt: serverTimestamp(),
+                musteriAdi: musteriAdi ? musteriAdi.trim() : '',
                 alan: alanInput, sektor, zemin, kirTuru, kirYogunlugu,
+                isCilaliZemin: Boolean(isCilaliZemin),
+                makineYasi: makineYasi || '0-1 Yaş',
                 makine: { id: aktifMakine.id, marka: aktifMakine.marka, model: aktifMakine.model },
-                aparat: { id: aktifAparat.id, ad: aktifAparat.ad },
+                aparat: { id: aktifAparat.id || '', ad: aktifAparat.ad || '' },
                 sonuclar: {
                     pratikM2:          hesaplamalar.pratikM2,
                     kaynakSuTuketimi:  hesaplamalar.kaynakSuTuketimi,
@@ -160,7 +167,8 @@ export default function Dashboard() {
             const pdfWidth  = pdf.internal.pageSize.getWidth();
             const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
             pdf.addImage(dataUrl, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save('otomat_raporu.pdf');
+            const safeFileName = musteriAdi ? `${musteriAdi.trim().replace(/\s+/g, '_')}_rapor.pdf` : 'otomat_raporu.pdf';
+            pdf.save(safeFileName);
         } catch (err) {
             console.error('PDF Export Error:', err);
             toast.error('PDF dışa aktarılırken bir hata oluştu: ' + err.message);
@@ -212,6 +220,7 @@ export default function Dashboard() {
                     makineVeritabani={makineVeritabani}
                     filtrelenmisMakineler={filtrelenmisMakineler}
                     onerilenPedler={onerilenPedler}
+                    musteriAdi={musteriAdi}
                     alanInput={alanInput}
                     sektor={sektor}
                     zemin={zemin}
@@ -222,6 +231,7 @@ export default function Dashboard() {
                     makineYasi={makineYasi}
                     seciliKategori={seciliKategori}
                     seciliAparatId={seciliAparatId}
+                    setMusteriAdi={setMusteriAdi}
                     handleAlanChange={handleAlanChange}
                     handleSektorChange={handleSektorChange}
                     setZemin={setZemin}
@@ -230,7 +240,7 @@ export default function Dashboard() {
                     setIsCilaliZemin={setIsCilaliZemin}
                     setSeciliMakineId={setSeciliMakineId}
                     setMakineYasi={setMakineYasi}
-                    setSeciliKategori={setSeciliKategori}
+                    setSeciliKategori={handleKategoriChange}
                     setSeciliAparatId={setSeciliAparatId}
                     onSelectRecommendedMachine={handleSelectRecommendedMachine}
                     onScrollToResults={scrollToResults}
@@ -267,9 +277,13 @@ export default function Dashboard() {
                 ) : (
                     <div ref={resultsRef} className="lg:col-span-8 xl:col-span-9">
                         <ResultPanel
+                            musteriAdi={musteriAdi}
+                            alanInput={alanInput}
                             aktifMakine={aktifMakine}
                             aktifAparat={aktifAparat}
                             hesaplamalar={hesaplamalar}
+                            birimMaliyetler={birimMaliyetler}
+                            onMaliyetChange={handleMaliyetChange}
                             isSaving={isSaving}
                             saveSuccess={saveSuccess}
                             onSaveReport={saveReport}
@@ -290,6 +304,7 @@ export default function Dashboard() {
                 kirTuru={kirTuru}
                 kirYogunlugu={kirYogunlugu}
                 scenarioText={scenarioText}
+                musteriAdi={musteriAdi}
             />
         </div>
     );

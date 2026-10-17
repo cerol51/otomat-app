@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Trash2, Pencil, X, List } from 'lucide-react';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import toast from 'react-hot-toast';
 import { invalidateDbCache } from '../../hooks/useDbData';
@@ -115,13 +115,14 @@ export function MachineTab({ confirmDelete }) {
         }
     };
 
-    const handleImportTaski = async () => {
-        if (!window.confirm('Tüm Taski makinelerini içe aktarmak istediğinize emin misiniz?')) return;
+    const importMachineBatch = async (machineList, brandLabel) => {
         setIsSaving(true);
         try {
+            const batch = writeBatch(db);
             const colRef = collection(db, 'makineler');
-            for (const m of taskiMachines) {
-                const dataToSave = {
+            for (const m of machineList) {
+                const newDocRef = doc(colRef);
+                batch.set(newDocRef, {
                     ...m,
                     fircaSayisi: Number(m.fircaSayisi) || 1,
                     calismaGenisligi: Number(m.calismaGenisligi) || 0,
@@ -134,10 +135,10 @@ export function MachineTab({ confirmDelete }) {
                     calismayaHazirAgirlik: Number(m.calismayaHazirAgirlik) || 0,
                     hiz: Number(m.hiz) || 0,
                     sesSeviyesi: Number(m.sesSeviyesi) || 0,
-                };
-                await addDoc(colRef, dataToSave);
+                });
             }
-            toast.success('Taski makineleri başarıyla içe aktarıldı!');
+            await batch.commit();
+            toast.success(`${brandLabel} makineleri başarıyla içe aktarıldı!`);
             invalidateDbCache();
         } catch (err) {
             console.error(err);
@@ -147,93 +148,75 @@ export function MachineTab({ confirmDelete }) {
         }
     };
 
-    const handleImportKarcher = async () => {
-        if (!window.confirm('Karcher makinelerini içe aktarmak istediğinize emin misiniz?')) return;
-        setIsSaving(true);
-        try {
-            const colRef = collection(db, 'makineler');
-            for (const m of karcherMachines) {
-                const dataToSave = {
-                    ...m,
-                    fircaSayisi: Number(m.fircaSayisi) || 1,
-                    calismaGenisligi: Number(m.calismaGenisligi) || 0,
-                    siliciLastikGenisligi: Number(m.siliciLastikGenisligi) || 0,
-                    temizSuTanki: Number(m.temizSuTanki) || 0,
-                    kirliSuTanki: Number(m.kirliSuTanki) || 0,
-                    teorikPerformans: Number(m.teorikPerformans) || 0,
-                    akim: Number(m.akim) || 0,
-                    akusuzAgirlik: Number(m.akusuzAgirlik) || 0,
-                    calismayaHazirAgirlik: Number(m.calismayaHazirAgirlik) || 0,
-                    hiz: Number(m.hiz) || 0,
-                    sesSeviyesi: Number(m.sesSeviyesi) || 0,
-                };
-                await addDoc(colRef, dataToSave);
-            }
-            toast.success('Karcher makineleri başarıyla içe aktarıldı!');
-            invalidateDbCache();
-        } catch (err) {
-            console.error(err);
-            toast.error('İçe aktarma hatası: ' + err.message);
-        } finally {
-            setIsSaving(false);
-        }
+    const handleImportTaski = () => {
+        confirmDelete('Taski makinelerini içe aktarma işlemi', () => importMachineBatch(taskiMachines, 'Taski'));
     };
 
-    const handleRemoveDuplicates = async () => {
-        if (!window.confirm('Eski/kopya makineleri silmek istediğinize emin misiniz? (Yeni eklenenler tutulacaktır)')) return;
-        setIsSaving(true);
-        try {
-            const groups = {};
-            mevcutMakineler.forEach(m => {
-                const key = `${m.marka?.toLowerCase()}_${m.model?.toLowerCase()}`.trim();
-                if (!groups[key]) groups[key] = [];
-                groups[key].push(m);
-            });
+    const handleImportKarcher = () => {
+        confirmDelete('Karcher makinelerini içe aktarma işlemi', () => importMachineBatch(karcherMachines, 'Karcher'));
+    };
 
-            let deletedCount = 0;
-            for (const key in groups) {
-                const group = groups[key];
-                if (group.length > 1) {
-                    group.sort((a, b) => {
-                        const aScore = (a.tekSarjSure ? 1 : 0) + (a.onerilenAlan ? 1 : 0);
-                        const bScore = (b.tekSarjSure ? 1 : 0) + (b.onerilenAlan ? 1 : 0);
-                        return bScore - aScore;
-                    });
-                    
-                    for (let i = 1; i < group.length; i++) {
-                        const idToDelete = group[i].id;
-                        await deleteDoc(doc(db, 'makineler', String(idToDelete)));
-                        deletedCount++;
+    const handleRemoveDuplicates = () => {
+        confirmDelete('Eski/kopya makineler', async () => {
+            setIsSaving(true);
+            try {
+                const groups = {};
+                mevcutMakineler.forEach(m => {
+                    const key = `${m.marka?.toLowerCase()}_${m.model?.toLowerCase()}`.trim();
+                    if (!groups[key]) groups[key] = [];
+                    groups[key].push(m);
+                });
+
+                const batch = writeBatch(db);
+                let deletedCount = 0;
+                for (const key in groups) {
+                    const group = groups[key];
+                    if (group.length > 1) {
+                        group.sort((a, b) => {
+                            const aScore = (a.tekSarjSure ? 1 : 0) + (a.onerilenAlan ? 1 : 0);
+                            const bScore = (b.tekSarjSure ? 1 : 0) + (b.onerilenAlan ? 1 : 0);
+                            return bScore - aScore;
+                        });
+                        
+                        for (let i = 1; i < group.length; i++) {
+                            const idToDelete = group[i].id;
+                            batch.delete(doc(db, 'makineler', String(idToDelete)));
+                            deletedCount++;
+                        }
                     }
                 }
+                if (deletedCount > 0) {
+                    await batch.commit();
+                }
+                toast.success(`${deletedCount} adet eski/kopya makine silindi.`);
+                invalidateDbCache();
+            } catch (err) {
+                console.error(err);
+                toast.error('Kopyaları silme hatası: ' + err.message);
+            } finally {
+                setIsSaving(false);
             }
-            toast.success(`${deletedCount} adet eski/kopya makine silindi.`);
-            invalidateDbCache();
-        } catch (err) {
-            console.error(err);
-            toast.error('Kopyaları silme hatası: ' + err.message);
-        } finally {
-            setIsSaving(false);
-        }
+        });
     };
 
-    const handleDeleteAll = async () => {
-        if (!window.confirm('DİKKAT: Veritabanındaki TÜM makineleri kalıcı olarak silmek istediğinize emin misiniz? (Bu işlem geri alınamaz!)')) return;
-        setIsSaving(true);
-        try {
-            let deletedCount = 0;
-            for (const m of mevcutMakineler) {
-                await deleteDoc(doc(db, 'makineler', String(m.id)));
-                deletedCount++;
+    const handleDeleteAll = () => {
+        confirmDelete('TÜM MAKİNELER (Kalıcı Silme)', async () => {
+            setIsSaving(true);
+            try {
+                const batch = writeBatch(db);
+                mevcutMakineler.forEach(m => {
+                    batch.delete(doc(db, 'makineler', String(m.id)));
+                });
+                await batch.commit();
+                toast.success(`${mevcutMakineler.length} adet makine başarıyla silindi.`);
+                invalidateDbCache();
+            } catch (err) {
+                console.error(err);
+                toast.error('Tümünü silme hatası: ' + err.message);
+            } finally {
+                setIsSaving(false);
             }
-            toast.success(`${deletedCount} adet makine başarıyla silindi.`);
-            invalidateDbCache();
-        } catch (err) {
-            console.error(err);
-            toast.error('Tümünü silme hatası: ' + err.message);
-        } finally {
-            setIsSaving(false);
-        }
+        });
     };
 
     const inputCls = 'w-full border border-gray-200 rounded-lg p-2 text-sm focus:border-rose-500 outline-none transition-colors';

@@ -5,7 +5,6 @@ import {
     isConcreteOrAsphalt,
     isNaturalStone,
     isPvcOrVinyl,
-    isTwisterPad,
     isMelaminePad,
     normalizeString,
     isCeramic,
@@ -239,8 +238,7 @@ export const generateScenario = (
     steps.push(`### 💧 4. Ana Yıkama Operasyonu`);
     steps.push(`- Makineyi çalıştırın ve ${marka} ${makineModel} (${surus}) ile ${zemin} zemin üzerinde temizliğe başlayın.`);
     if (isCokYogun) {
-        steps.push(`> [!IMPORTANT]`);
-        steps.push(`> **🔄 Çift Geçiş (Indirect Washing) Önerilir:** Alan çok kirli olduğu için, önce vakum motorunu (emiciyi) kapalı tutarak zemine sadece solüsyon püskürtüp fırçalayın.`);
+        steps.push(`> **🔄 ÖNEMLİ — Çift Geçiş (Indirect Washing) Önerilir:** Alan çok kirli olduğu için, önce vakum motorunu (emiciyi) kapalı tutarak zemine sadece solüsyon püskürtüp fırçalayın.`);
         steps.push(`> Solüsyonun kiri çözmesi için kurumasına izin vermeden **5-10 dakika bekleyin**.`);
         steps.push(`> Ardından vakum motorunu açıp aynı hattan ikinci kez geçerek çözülen kirli suyu emdirin.`);
     } else if (isYogun) {

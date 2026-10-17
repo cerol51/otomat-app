@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { FileText, Calendar, MapPin, Loader2, Trash2 } from 'lucide-react';
+import { FileText, Calendar, MapPin, Loader2, Trash2, ExternalLink, Building2 } from 'lucide-react';
 import { dakikaFormatla } from '../utils/calculations';
 import toast from 'react-hot-toast';
 
 export default function Reports() {
     const { currentUser } = useAuth();
+    const navigate = useNavigate();
     const [reports, setReports]               = useState([]);
     const [loading, setLoading]               = useState(true);
     const [selectedReport, setSelectedReport] = useState(null);
@@ -79,6 +81,10 @@ export default function Reports() {
         setConfirmId(null);
     };
 
+    const handleLoadIntoCalculator = (report) => {
+        navigate('/app', { state: { loadReport: report } });
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center p-24">
@@ -96,7 +102,7 @@ export default function Reports() {
                 <div>
                     <h1 className="text-2xl font-black text-slate-800">Geçmiş Raporlarım</h1>
                     <p className="text-slate-500 font-medium mt-1">
-                        Daha önce kaydettiğiniz tüm analizleri buradan görüntüleyebilir veya silebilirsiniz.
+                        Daha önce kaydettiğiniz tüm analizleri buradan görüntüleyebilir, tekrar hesaplayıcıya yükleyebilir veya silebilirsiniz.
                     </p>
                 </div>
             </div>
@@ -140,10 +146,16 @@ export default function Reports() {
 
                                 {/* İçerik */}
                                 <div className="flex-1">
+                                    {report.musteriAdi && (
+                                        <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 mb-1.5">
+                                            <Building2 size={14} />
+                                            <span className="truncate">{report.musteriAdi}</span>
+                                        </div>
+                                    )}
                                     <h3 className="font-bold text-slate-800 mb-1">
                                         {report.makine?.marka} {report.makine?.model}
                                     </h3>
-                                    <p className="text-sm font-medium text-slate-500 mb-4">{report.aparat?.ad}</p>
+                                    <p className="text-sm font-medium text-slate-500 mb-4">{report.aparat?.ad || 'Ped seçilmedi'}</p>
 
                                     <div className="grid grid-cols-2 gap-2 text-xs">
                                         <div className="bg-slate-50 p-2 rounded-lg">
@@ -170,8 +182,17 @@ export default function Reports() {
                                     </div>
                                 </div>
 
-                                {/* Silme Aksiyonları */}
-                                <div className="mt-4 pt-3 border-t border-gray-50 flex justify-end">
+                                {/* Aksiyonlar */}
+                                <div className="mt-4 pt-3 border-t border-gray-50 flex justify-between items-center">
+                                    <button
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            handleLoadIntoCalculator(report);
+                                        }}
+                                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50/70 hover:bg-indigo-100 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+                                    >
+                                        <ExternalLink size={14} /> Hesaplayıcıda Aç
+                                    </button>
                                     {isConfirming ? (
                                         <div className="flex items-center gap-2 animate-in fade-in">
                                             <span className="text-xs font-semibold text-rose-600">Emin misiniz?</span>
@@ -217,7 +238,9 @@ export default function Reports() {
                     >
                         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-slate-50">
                             <div>
-                                <h2 className="text-xl font-black text-slate-800">Rapor Detayı</h2>
+                                <h2 className="text-xl font-black text-slate-800">
+                                    {selectedReport.musteriAdi || 'Rapor Detayı'}
+                                </h2>
                                 <p className="text-xs font-semibold text-slate-500 mt-1">
                                     {selectedReport.createdAt
                                         ? new Date(selectedReport.createdAt).toLocaleString('tr-TR')
@@ -242,7 +265,7 @@ export default function Reports() {
                                 </div>
                                 <div className="text-right">
                                     <span className="block text-xs font-bold text-indigo-400 uppercase">Ped/Fırça</span>
-                                    <span className="text-sm font-bold text-indigo-700">{selectedReport.aparat?.ad}</span>
+                                    <span className="text-sm font-bold text-indigo-700">{selectedReport.aparat?.ad || '-'}</span>
                                 </div>
                             </div>
 
@@ -277,8 +300,8 @@ export default function Reports() {
                                         <span className="font-bold text-emerald-800">{selectedReport.sonuclar?.pratikM2} m²/sa</span>
                                     </div>
                                     <div className="flex justify-between p-3 bg-emerald-50 rounded-xl border border-emerald-100">
-                                        <span className="text-emerald-700 font-medium">Gerekli Adet</span>
-                                        <span className="font-bold text-emerald-800">{selectedReport.sonuclar?.gerekliAdet} Makine</span>
+                                        <span className="text-emerald-700 font-medium">Ped/Fırça Tüketimi</span>
+                                        <span className="font-bold text-emerald-800">{selectedReport.sonuclar?.gerekliAdet} Adet</span>
                                     </div>
                                     <div className="flex justify-between p-3 bg-blue-50 rounded-xl border border-blue-100">
                                         <span className="text-blue-700 font-medium">Su Tüketimi</span>
@@ -293,6 +316,16 @@ export default function Reports() {
                                         </span>
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Modal Aksiyon Butonu */}
+                            <div className="pt-2">
+                                <button
+                                    onClick={() => handleLoadIntoCalculator(selectedReport)}
+                                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 transition-colors"
+                                >
+                                    <ExternalLink size={18} /> Bu Analizi Hesaplayıcıda Aç & PDF Al
+                                </button>
                             </div>
                         </div>
                     </div>

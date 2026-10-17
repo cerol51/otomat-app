@@ -1,18 +1,310 @@
 rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// This security rules file assumes the following data structures:
+//
+// Collection: sabitVeriler
+// Document ID: {docId} (e.g., uygulamaAyarlari)
+// Fields:
+//   - zeminTipleri: list (optional, max 100 items) - Floor types
+//   - sektorelVeriler: map (optional) - Sector-specific dirt & config map
+//   - kirYogunluklari: list (optional, max 50 items) - Dirt density options
+//   - kategoriler: list (optional, max 50 items) - Apparatus categories
+//   - markalar: list (optional, max 50 items) - Machine brands
+//   - surusTipleri: list (optional, max 50 items) - Drive types
+//
+// Collection: makineler
+// Document ID: {machineId}
+// Fields:
+//   - marka: string (required, 1..100 chars) - Machine brand
+//   - model: string (required, 1..150 chars) - Machine model
+//   - surus: string (optional, 0..100 chars) - Drive type
+//   - fircaSayisi: number (optional) - Number of brushes/pads
+//   - calismaGenisligi: number (optional) - Working width (cm)
+//   - siliciLastikGenisligi: number (optional) - Squeegee width (cm)
+//   - fircaPedEbatlari: string (optional, 0..200 chars) - Brush/pad dimensions
+//   - fircaBasinci: string (optional, 0..200 chars) - Brush pressure
+//   - solusyonTuketimi: string (optional, 0..200 chars) - Solution consumption
+//   - boyutlar: string (optional, 0..200 chars) - Machine dimensions
+//   - temizSuTanki: number (optional) - Clean water tank capacity (L)
+//   - kirliSuTanki: number (optional) - Recovery tank capacity (L)
+//   - teorikPerformans: number (optional) - Theoretical performance (m2/h)
+//   - pratikPerformans: number (optional) - Practical performance (m2/h)
+//   - tekSarjSure: string (optional, 0..200 chars) - Single charge runtime
+//   - tamSarjSure: string (optional, 0..200 chars) - Full charge time
+//   - tekSarjPratikAlan: number (optional) - Practical area per charge
+//   - onerilenAlan: string (optional, 0..300 chars) - Recommended area description
+//   - akim: number (optional) - Voltage (V)
+//   - akusuzAgirlik: number (optional) - Weight without battery (kg)
+//   - calismayaHazirAgirlik: number (optional) - Ready-to-work weight (kg)
+//   - hiz: number (optional) - Speed (km/h)
+//   - sesSeviyesi: number (optional) - Sound level (dB)
+//
+// Collection: aparatlar
+// Document ID: {aparatId}
+// Fields:
+//   - ad: string (required, 1..150 chars) - Pad/brush name
+//   - kategori: string (required, 1..100 chars) - Category name
+//   - aciklama: string (required, 1..1000 chars) - Usage scenario / description
+//   - uygunZeminler: list (optional, max 100 items) - Compatible floor types
+//   - uygunMakineler: list (optional, max 200 items) - Compatible machines
+//
+// Collection: users
+// Document ID: {userId} (matches Firebase Auth UID)
+// Fields:
+//   - email: string (required, immutable, matches request.auth.token.email) - User email
+//   - lastLogin: string (optional, ISO 8601 date string, 1..64 chars) - Last login timestamp
+//
+// Collection: reports
+// Document ID: {reportId}
+// Fields:
+//   - userId: string (required, immutable, matches request.auth.uid) - Owner UID
+//   - createdAt: timestamp (required, immutable) - Creation timestamp
+//   - alan: number or string (required) - Area in m2
+//   - sektor: string (required, 0..200 chars) - Sector name
+//   - zemin: string (required, 0..200 chars) - Floor type
+//   - kirTuru: string (required, 0..200 chars) - Dirt type
+//   - kirYogunlugu: string (required, 0..200 chars) - Dirt density
+//   - musteriAdi: string (optional, 0..150 chars) - Customer / facility name
+//   - isCilaliZemin: bool (optional) - Whether floor is polished/coated
+//   - makineYasi: string (optional, 0..50 chars) - Machine age bracket
+//   - makine: map (required, keys: id, marka, model) - Selected machine summary
+//   - aparat: map (required, keys: id, ad) - Selected apparatus summary
+//   - sonuclar: map (required, keys: pratikM2, kaynakSuTuketimi, netYikamaDk, toplamOperasyonDk, gerekliAdet) - Calculated results
+//
+// ===============================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Kendi profil bilgilerini güncelleyebilme
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
-    // Uygulama verilerine sadece yetkili (Admin) e-postalar yazabilir
+    // Check if the authenticated user is a bootstrapped Admin
+    function isAdmin() {
+      return isAuthenticated() &&
+        'email' in request.auth.token &&
+        request.auth.token.email in ['admin@otomatpro.com', 'cihaterol@gmail.com'];
+    }
+
+    // Check if user owns the resource (for path-scoped user documents)
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Check if user is owner based on document's userId field
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    // Verify userId hasn't been tampered with on create
+    function uidUnchanged() {
+      return 'userId' in request.resource.data &&
+        request.resource.data.userId == request.auth.uid;
+    }
+
+    // Ensure userId field is not modified on update
+    function uidNotModified() {
+      return 'userId' in request.resource.data &&
+        request.resource.data.userId == resource.data.userId;
+    }
+
+    // Validate required fields exist
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Validate that the document contains only the allowed fields
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Validate that immutable fields have not changed on update
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // Validate string length
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    // Validate optional string (if present, must be string and within length)
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+        (request.resource.data[field] is string &&
+         request.resource.data[field].size() >= minLen &&
+         request.resource.data[field].size() <= maxLen);
+    }
+
+    // Validate email format
+    function isValidEmail(email) {
+      return email is string &&
+        email.size() >= 3 &&
+        email.size() <= 254 &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // Validate that a list is a list and enforces size limits
+    function isValidList(list, maxSize) {
+      return list is list && list.size() <= maxSize;
+    }
+
+    // Validate that a map contains only allowed keys
+    function isValidMap(mapData, allowedKeys) {
+      return mapData is map && mapData.keys().hasOnly(allowedKeys);
+    }
+
+    // ===============================================================
+    // Domain Validators (Used in BOTH create and update)
+    // ===============================================================
+
+    function isValidSabitVeri(data) {
+      return data is map && data.keys().size() <= 50;
+    }
+
+    function isValidMakine(data) {
+      return hasRequiredFields(['marka', 'model']) &&
+        hasOnlyAllowedFields([
+          'id', 'marka', 'model', 'surus', 'fircaSayisi', 'calismaGenisligi',
+          'siliciLastikGenisligi', 'fircaPedEbatlari', 'fircaBasinci',
+          'solusyonTuketimi', 'boyutlar', 'temizSuTanki', 'kirliSuTanki',
+          'teorikPerformans', 'pratikPerformans', 'tekSarjSure', 'tamSarjSure',
+          'tekSarjPratikAlan', 'onerilenAlan', 'akim', 'akusuzAgirlik',
+          'calismayaHazirAgirlik', 'hiz', 'sesSeviyesi',
+          'tank', 'm2', 'aku', 'basinc', 'ebat'
+        ]) &&
+        validStringLength('marka', 1, 100) &&
+        validStringLength('model', 1, 150) &&
+        isValidOptionalString('surus', 0, 100) &&
+        isValidOptionalString('fircaPedEbatlari', 0, 200) &&
+        isValidOptionalString('fircaBasinci', 0, 200) &&
+        isValidOptionalString('solusyonTuketimi', 0, 200) &&
+        isValidOptionalString('boyutlar', 0, 200) &&
+        isValidOptionalString('tekSarjSure', 0, 200) &&
+        isValidOptionalString('tamSarjSure', 0, 200) &&
+        isValidOptionalString('onerilenAlan', 0, 300);
+    }
+
+    function isValidAparat(data) {
+      return hasRequiredFields(['ad', 'kategori', 'aciklama']) &&
+        hasOnlyAllowedFields([
+          'id', 'ad', 'kategori', 'aciklama', 'uygunZeminler', 'uygunMakineler'
+        ]) &&
+        validStringLength('ad', 1, 150) &&
+        validStringLength('kategori', 1, 100) &&
+        validStringLength('aciklama', 1, 1000) &&
+        (!('uygunZeminler' in data) || isValidList(data.uygunZeminler, 100)) &&
+        (!('uygunMakineler' in data) || isValidList(data.uygunMakineler, 200));
+    }
+
+    function isValidUser(data) {
+      return hasRequiredFields(['email']) &&
+        hasOnlyAllowedFields(['email', 'lastLogin']) &&
+        isValidEmail(data.email) &&
+        'email' in request.auth.token &&
+        data.email == request.auth.token.email &&
+        isValidOptionalString('lastLogin', 1, 64);
+    }
+
+    function isValidReport(data) {
+      return hasRequiredFields([
+          'userId', 'createdAt', 'alan', 'sektor', 'zemin',
+          'kirTuru', 'kirYogunlugu', 'makine', 'aparat', 'sonuclar'
+        ]) &&
+        hasOnlyAllowedFields([
+          'userId', 'createdAt', 'alan', 'sektor', 'zemin',
+          'kirTuru', 'kirYogunlugu', 'musteriAdi', 'isCilaliZemin', 'makineYasi',
+          'makine', 'aparat', 'sonuclar'
+        ]) &&
+        validStringLength('userId', 1, 128) &&
+        data.createdAt is timestamp &&
+        ((data.alan is number && data.alan >= 0 && data.alan <= 1000000) ||
+         (data.alan is string && data.alan.size() <= 20)) &&
+        validStringLength('sektor', 0, 200) &&
+        validStringLength('zemin', 0, 200) &&
+        validStringLength('kirTuru', 0, 200) &&
+        validStringLength('kirYogunlugu', 0, 200) &&
+        isValidOptionalString('musteriAdi', 0, 150) &&
+        (!('isCilaliZemin' in data) || data.isCilaliZemin is bool) &&
+        isValidOptionalString('makineYasi', 0, 50) &&
+        isValidMap(data.makine, ['id', 'marka', 'model']) &&
+        data.makine.marka is string && data.makine.marka.size() <= 100 &&
+        data.makine.model is string && data.makine.model.size() <= 150 &&
+        isValidMap(data.aparat, ['id', 'ad']) &&
+        data.aparat.ad is string && data.aparat.ad.size() <= 150 &&
+        isValidMap(data.sonuclar, [
+          'pratikM2', 'kaynakSuTuketimi', 'netYikamaDk', 'toplamOperasyonDk', 'gerekliAdet'
+        ]) &&
+        data.sonuclar.pratikM2 is number &&
+        data.sonuclar.kaynakSuTuketimi is number &&
+        data.sonuclar.netYikamaDk is number &&
+        data.sonuclar.toplamOperasyonDk is number &&
+        data.sonuclar.gerekliAdet is number;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Static reference data: Read-only for authenticated users, write-only for Admins
+    match /sabitVeriler/{docId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidSabitVeri(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Machines catalog: Read-only for authenticated users, CRUD for Admins
+    match /makineler/{machineId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidMakine(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Apparatus catalog: Read-only for authenticated users, CRUD for Admins
+    match /aparatlar/{aparatId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAdmin() && isValidAparat(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // User profiles (contains PII): Owner or Admin can read; Owner can create/update own email; Admin can delete
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) &&
+        isValidUser(request.resource.data) &&
+        areImmutableFieldsUnchanged(['email']);
+      allow delete: if isAdmin();
+    }
+
+    // Saved analysis reports: Scoped to report owner or Admin
+    match /reports/{reportId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() &&
+        uidUnchanged() &&
+        isValidReport(request.resource.data);
+      allow update: if (isDocOwner() || isAdmin()) &&
+        uidNotModified() &&
+        areImmutableFieldsUnchanged(['userId', 'createdAt']) &&
+        isValidReport(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    // Default deny for all other paths
     match /{document=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && 
-                   (request.auth.token.email == 'admin@otomatpro.com' || 
-                    request.auth.token.email == 'cihaterol@gmail.com');
+      allow read, write: if false;
     }
   }
 }

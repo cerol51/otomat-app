@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Calculator, CheckCircle, Download } from 'lucide-react';
+import { FileText, Calculator, CheckCircle, Download, Coins, ChevronDown, ChevronUp } from 'lucide-react';
 import { TableRow } from '../TableRow';
 import { dakikaFormatla } from '../../utils/calculations';
 
@@ -11,14 +12,18 @@ const STATUS_COLORS = {
 };
 
 /**
- * Dashboard'un sağ sütunu: hesaplama sonuçları, aksiyon butonları.
+ * Dashboard'un sağ sütunu: hesaplama sonuçları, maliyet analizi ve aksiyon butonları.
  * id="report-content" div'i PDF export için burada tanımlanmıştır.
  */
 export function ResultPanel({
+    musteriAdi, alanInput,
     aktifMakine, aktifAparat, hesaplamalar,
+    birimMaliyetler, onMaliyetChange,
     isSaving, saveSuccess, onSaveReport,
     isExporting, onExportPDF, onOpenScenario,
 }) {
+    const [showCostInputs, setShowCostInputs] = useState(false);
+
     const {
         pratikM2, kaynakSuTuketimi, kimyasal, isTwister,
         netYikamaDk, doldurBosaltDk, toplamOperasyonDk,
@@ -29,8 +34,22 @@ export function ResultPanel({
     } = hesaplamalar;
 
     const toplamSureDk   = netYikamaDk + doldurBosaltDk;
-    const yikamaYuzde    = Math.round((netYikamaDk    / toplamSureDk) * 100);
-    const bosaltYuzde    = Math.round((doldurBosaltDk / toplamSureDk) * 100);
+    const yikamaYuzde    = toplamSureDk > 0 ? Math.round((netYikamaDk    / toplamSureDk) * 100) : 0;
+    const bosaltYuzde    = toplamSureDk > 0 ? (100 - yikamaYuzde) : 0;
+
+    // ── Finansal Maliyet Hesaplamaları (TL) ──
+    const suMaliyeti       = (kaynakSuTuketimi / 1000) * (birimMaliyetler?.suM3Fiyat || 0);
+    const kimyasalLitreNum = parseFloat(kimyasal.litre) || 0;
+    const kimyasalMaliyeti = kimyasalLitreNum * (birimMaliyetler?.kimyasalLtFiyat || 0);
+    // Ped maliyeti: Bu operasyondaki yıpranma oranına düşen amortisman maliyeti
+    const yipranmaOraniNum = parseFloat((yipranmaOrani || '0').replace(',', '.')) / 100;
+    const fircaSayisi      = Number(aktifMakine.fircaSayisi) || 1;
+    const pedAmortismanMaliyeti = Math.min(gerekliAdet, Math.max(yipranmaOraniNum * fircaSayisi, 0.01)) * (birimMaliyetler?.pedAdetFiyat || 0);
+    const iscilikMaliyeti  = (toplamOperasyonDk / 60) * (birimMaliyetler?.iscilikSaatFiyat || 0);
+    const toplamOperasyonMaliyeti = suMaliyeti + kimyasalMaliyeti + pedAmortismanMaliyeti + iscilikMaliyeti;
+    const aylikMaliyet     = toplamOperasyonMaliyeti * 26; // Ayda 26 iş günü varsayımı
+
+    const formatTL = (val) => val.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
 
     return (
         <div className="lg:col-span-8 flex flex-col gap-6">
@@ -38,7 +57,7 @@ export function ResultPanel({
             {/* ── Başlık + Butonlar ── */}
             <div className="flex justify-between items-center no-print mb-2">
                 <h1 className="text-2xl font-extrabold text-slate-800 hidden lg:block bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
-                    Operasyonel Rapor
+                    {musteriAdi ? `${musteriAdi} — Operasyonel Rapor` : 'Operasyonel Rapor'}
                 </h1>
                 <div className="flex gap-2">
                     <button
@@ -67,6 +86,20 @@ export function ResultPanel({
 
             {/* ── PDF İçeriği ── */}
             <div id="report-content" className="flex flex-col gap-6">
+
+                {/* Müşteri / Tesis Kurumsal Başlık Kartı (Varsa gösterilir) */}
+                {musteriAdi && (
+                    <div className="glass-card rounded-2xl px-6 py-4 shadow-sm border-l-4 border-l-indigo-600 flex justify-between items-center bg-white/90">
+                        <div>
+                            <p className="text-[11px] font-bold text-indigo-500 uppercase tracking-wider">Müşteri / Tesis Analiz Raporu</p>
+                            <h2 className="text-xl font-black text-slate-800">{musteriAdi}</h2>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-xs font-semibold text-slate-400">{new Date().toLocaleDateString('tr-TR')}</p>
+                            <p className="text-sm font-bold text-slate-700">{Number(alanInput).toLocaleString('tr-TR')} m² Temizlik Alanı</p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Ekipman Özeti */}
                 <motion.div
@@ -196,11 +229,73 @@ export function ResultPanel({
                                     />
                                     <div
                                         className="progress-fill bg-gradient-to-r from-emerald-500 to-teal-500"
-                                        style={{ width: `${bosaltYuzde}%`, marginLeft: `${yikamaYuzde}%` }}
+                                        style={{ width: `${bosaltYuzde}%` }}
                                     />
                                 </div>
                             </div>
                         </TableRow>
+                    </div>
+                </div>
+
+                {/* ── Finansal Maliyet ve Tasarruf Analizi ── */}
+                <div className="glass-card rounded-2xl overflow-hidden shadow-lg shadow-slate-200/50 border-t-4 border-t-emerald-500">
+                    <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white px-6 py-4 text-[14px] font-bold flex justify-between items-center tracking-wide shadow-sm">
+                        <div className="flex items-center">
+                            <Coins className="mr-3 text-emerald-400" size={20} />
+                            TAHMİNİ OPERASYONEL MALİYET ANALİZİ
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowCostInputs(prev => !prev)}
+                            className="text-xs bg-white/10 hover:bg-white/20 text-emerald-300 px-3 py-1 rounded-lg flex items-center gap-1 transition-colors no-print"
+                        >
+                            Birim Fiyatları Düzenle {showCostInputs ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                    </div>
+
+                    {showCostInputs && (
+                        <div className="p-4 bg-emerald-50/40 border-b border-emerald-100 grid grid-cols-2 sm:grid-cols-4 gap-3 no-print">
+                            {[
+                                { key: 'suM3Fiyat',        label: 'Su (m³ / 1000L ₺)' },
+                                { key: 'kimyasalLtFiyat',  label: 'Kimyasal (1 Lt ₺)' },
+                                { key: 'pedAdetFiyat',     label: 'Ped/Fırça (Adet ₺)' },
+                                { key: 'iscilikSaatFiyat', label: 'İşçilik (Saatlik ₺)' },
+                            ].map(({ key, label }) => (
+                                <div key={key}>
+                                    <label className="block text-[11px] font-bold text-slate-600 mb-1">{label}</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={birimMaliyetler?.[key] ?? 0}
+                                        onChange={e => onMaliyetChange(key, e.target.value)}
+                                        className="w-full border border-emerald-200 bg-white rounded-lg p-2 text-xs font-bold text-slate-800 focus:border-emerald-500 outline-none"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="p-5 grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+                        <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                            <p className="text-[11px] font-bold text-slate-400 uppercase">Su + Kimyasal</p>
+                            <p className="text-sm font-extrabold text-slate-800 mt-1">{formatTL(suMaliyeti + kimyasalMaliyeti)}</p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                            <p className="text-[11px] font-bold text-slate-400 uppercase">Ped Amortismanı</p>
+                            <p className="text-sm font-extrabold text-slate-800 mt-1">{formatTL(pedAmortismanMaliyeti)}</p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                            <p className="text-[11px] font-bold text-slate-400 uppercase">Personel / İşçilik</p>
+                            <p className="text-sm font-extrabold text-slate-800 mt-1">{formatTL(iscilikMaliyeti)}</p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                            <p className="text-[11px] font-bold text-emerald-700 uppercase">Tek Temizlik</p>
+                            <p className="text-base font-black text-emerald-800 mt-1">{formatTL(toplamOperasyonMaliyeti)}</p>
+                        </div>
+                        <div className="col-span-2 sm:col-span-1 p-3 rounded-xl bg-indigo-50 border border-indigo-200">
+                            <p className="text-[11px] font-bold text-indigo-700 uppercase">Aylık (26 Gün)</p>
+                            <p className="text-base font-black text-indigo-800 mt-1">{formatTL(aylikMaliyet)}</p>
+                        </div>
                     </div>
                 </div>
             </div>

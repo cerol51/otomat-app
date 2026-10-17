@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Settings, ShieldAlert, FileText, CheckCircle, ArrowRight } from 'lucide-react';
+import { Settings, FileText, CheckCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Landing() {
